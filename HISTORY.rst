@@ -3,6 +3,11 @@
 History
 -------
 
+v0.6.7
+------
+
+* Update to OAuth Flow Login - quodrumglas_
+
 v0.6.6
 ------
 
