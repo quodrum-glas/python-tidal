@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 #
+# Copyright (C) 2020 quodrumglas
 # Copyright (C) 2019 morguldir
 # Copyright (C) 2014 Thomas Amland
 #
@@ -17,25 +18,41 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import unicode_literals
-from collections import namedtuple
+
+import base64
+import hashlib
+import os
+from time import time
+
 from enum import Enum
 
 import datetime
 import json
 import logging
 import requests
-import base64
+from requests.exceptions import HTTPError
+
 from .models import Artist, Album, Track, Video, Playlist, SearchResult, Category, Role
 
 try:
-    from urlparse import urljoin
+    from urlparse import parse_qs, urljoin, urlsplit
+    from urllib import urlencode, unquote
 except ImportError:
-    from urllib.parse import urljoin
+    from urllib.parse import parse_qs, urljoin, urlsplit, urlencode, unquote
 
 log = logging.getLogger(__name__)
 
 
+class AuthorizationError(Exception):
+    pass
+
+
+class AuthorizationNeeded(Exception):
+    pass
+
+
 class Quality(Enum):
+    master = 'HI_RES'
     lossless = 'LOSSLESS'
     high = 'HIGH'
     low = 'LOW'
@@ -48,82 +65,172 @@ class VideoQuality(Enum):
 
 
 class Config(object):
-    def __init__(self, quality=Quality.high, video_quality=VideoQuality.high):
+    def __init__(self, api_token, auth_json_file, quality=Quality.master, video_quality=VideoQuality.high):
         self.quality = quality.value
         self.video_quality = video_quality.value
         self.api_location = 'https://api.tidalhifi.com/v1/'
-        self.api_token = 'pl4Vc0hemlAXD0mN'
-        self.api_token = eval(u'\x67\x6c\x6f\x62\x61\x6c\x73'.
-            encode("437"))()[u"\x5f\x5f\x6e\x61\x6d\x65\x5f\x5f".
-            encode("".join(map(chr, [105, 105, 99, 115, 97][::-1]))).
-            decode("".join(map(chr, [117, 116, 70, 95, 56])))]
-        self.api_token += '.' + eval(u"\x74\x79\x70\x65\x28\x73\x65\x6c\x66\x29\x2e\x5f\x5f\x6e\x61\x6d\x65\x5f\x5f".
-            encode("".join(map(chr, [105, 105, 99, 115, 97][::-1]))).
-            decode("".join(map(chr, [117, 116, 70, 95, 56]))))
-        token = self.api_token
-        self.api_token = list((base64.b64decode("d3RjaThkamFfbHlhQnBKaWQuMkMwb3puT2ZtaXhnMA==").decode()))
-        for B in token:
-            self.api_token.remove(B)
-        self.api_token = "".join(self.api_token)
+        self.api_token = api_token
+        self.auth_json_file = auth_json_file
+
 
 class Session(object):
-    def __init__(self, config=Config()):
-        self.session_id = None
-        self.country_code = None
-        self.user = None
+    _redirect_uri = "https://tidal.com/android/login/auth"  # or tidal://login/auth
+    _api_base_url = "https://api.tidal.com/"
+    _oauth_authorize_url = "https://login.tidal.com/authorize"
+    _oauth_token_url = "https://auth.tidal.com/v1/oauth2/token"
+
+    def __init__(self, config):
+        self.client_id = config.api_token
         self._config = config
-        """:type _config: :class:`Config`"""
+        self._user = None
+        self.auth_expire = 0
+        self._auth_info = {}
+        self._refresh_token = None
+        self._token_expiry = 0
 
-    def load_session(self, session_id, country_code=None, user_id=None):
-        self.session_id = session_id
-        if not user_id or not country_code:
-            request = self.request('GET', 'sessions').json()
-            country_code = request['countryCode']
-            user_id = request['userId']
+    @property
+    def auth_info(self):
+        if not self._auth_info:
+            try:
+                with open(self._config.auth_json_file, 'r') as f:
+                    self._auth_info = json.load(f)
+            except IOError:
+                raise NotImplementedError
+        return self._auth_info
 
-        self.country_code = country_code
-        self.user = User(self, id=user_id)
+    @auth_info.setter
+    def auth_info(self, data):
+        self._token_expiry = time() + int(data['expires_in'])
+        self._auth_info.update(data)
+        with open(self._config.auth_json_file, 'w') as f:
+            json.dump(self._auth_info, f)
 
-    def login(self, username, password):
-        url = urljoin(self._config.api_location, 'login/username')
-        headers = {"X-Tidal-Token": self._config.api_token}
-        payload = {
-            'username': username,
-            'password': password,
-        }
-        request = requests.post(url, data=payload, headers=headers)
+    @property
+    def token_expiry(self):
+        if not self._token_expiry:
+            self._token_expiry = os.path.getmtime(self._config.auth_json_file) + int(self.auth_info['expires_in'])
+        return self._token_expiry
 
-        if not request.ok:
-            print(request.text)
-            request.raise_for_status()
+    @property
+    def refresh_token(self):
+        return self.auth_info["refresh_token"]
 
-        body = request.json()
-        self.session_id = body['sessionId']
-        self.country_code = body['countryCode']
-        self.user = User(self, id=body['userId'])
-        return True
+    @property
+    def country_code(self):
+        return self.auth_info["user"]["countryCode"]
 
-    def check_login(self):
-        """ Returns true if current session is valid, false otherwise. """
-        if self.user is None or not self.user.id or not self.session_id:
-            return False
-        url = urljoin(self._config.api_location, 'users/%s/subscription' % self.user.id)
-        return requests.get(url, params={'sessionId': self.session_id}).ok
+    @property
+    def user_id(self):
+        return self.auth_info["user"]["userId"]
 
-    def request(self, method, path, params=None, data=None):
+    @property
+    def user(self):
+        if not self._user:
+            self._user = User(self, id=self.user_id)
+        return self._user
+
+    def login(self, interactive_auth_url_getter=input, force_relogin=False):
+        if self._auth_info is not None and not force_relogin:
+            return
+        code_verifier, authorization_url = self.login_part1()
+        auth_url = interactive_auth_url_getter(authorization_url)
+        self.login_part2(code_verifier, auth_url)
+
+    def login_part1(self):
+        # https://tools.ietf.org/html/rfc7636#appendix-B
+        code_verifier = base64.urlsafe_b64encode(os.urandom(32))[:-1]
+        code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier).digest())[:-1]
+        qs = urlencode(
+            {
+                "response_type": "code",
+                "redirect_uri": self._redirect_uri,
+                "client_id": self.client_id,
+                "appMode": "android",
+                "code_challenge": code_challenge.decode("ascii"),
+                "code_challenge_method": "S256",
+                "restrict_signup": "true",
+            }
+        )
+        authorization_url = urljoin(self._oauth_authorize_url, "?" + qs)
+        return code_verifier.decode("ascii"), authorization_url
+
+    def login_part2(self, code_verifier, auth_url):
+        code = parse_qs(urlsplit(auth_url).query)["code"][0]
+        resp = requests.post(
+            self._oauth_token_url,
+            data={
+                "code": code,
+                "client_id": self.client_id,
+                "grant_type": "authorization_code",
+                "redirect_uri": self._redirect_uri,
+                "scope": "r_usr w_usr w_sub",
+                "code_verifier": code_verifier.decode("ascii"),
+            },
+        )
+        data = resp.json()
+        if resp.status_code != 200:
+            raise AuthorizationError(data["error"], data["error_description"])
+        self.auth_info = data
+
+    def refresh_session(self):
+        if self.refresh_token is None:
+            raise AuthorizationNeeded
+        resp = requests.post(
+            self._oauth_token_url,
+            data={
+                "client_id": self.client_id,
+                "grant_type": "refresh_token",
+                "scope": "r_usr w_usr w_sub",
+                "refresh_token": self.refresh_token,
+            },
+        )
+        data = resp.json()
+        if resp.status_code != 200:
+            raise AuthorizationError(data["error"], data["error_description"])
+        self.auth_info = data
+
+    def request(self, *args, **kwargs):
+        resp = self._request(*args, **kwargs)
+        try:
+            return resp.json()
+        except:
+            return resp
+
+    def _request(self, method, path, params=None, data=None, headers=None):
         request_params = {
-            'sessionId': self.session_id,
-            'countryCode': self.country_code,
             'limit': '999',
+            'deviceType': 'PHONE',
+            'locale': 'en_GB',
+            'countryCode': self.country_code,
         }
         if params:
             request_params.update(params)
+        request_headers = headers or {}
+        request_headers.update({
+            "X-Tidal-Token": self.client_id,
+            "Authorization": "{} {}".format(self.auth_info["token_type"], self.auth_info["access_token"]),
+        })
         url = urljoin(self._config.api_location, path)
-        request = requests.request(method, url, params=request_params, data=data)
-        log.debug("request: %s", request.request.url)
-        request.raise_for_status()
+        request = requests.request(method, url, headers=request_headers, params=request_params, data=data)
+        log.debug("oauth request: %s", request.request.url)
+        try:
+            request.raise_for_status()
+        except HTTPError as e:
+            if request.status_code == 401:
+                log.error(e)
+                if self.token_expiry < time():
+                    log.info("Token has expired. Refreshing session...")
+                    self.refresh_session()
+                    return self.request(method, path, params, data, headers)
+                log.info("Token not expired yet. Valid until: {}".format(
+                    datetime.datetime.fromtimestamp(self.token_expiry).isoformat()))
+                return
+            if request.status_code == 404:
+                log.error(e)
+                return
+            raise
         if request.content:
-            log.debug("response: %s", json.dumps(request.json(), indent=4))
+            log.debug("Response: %s", json.dumps(request.json(), indent=4))
         return request
 
     def get_user(self, user_id):
@@ -137,6 +244,13 @@ class Session(object):
 
     def get_playlist_tracks(self, playlist_id):
         return self._map_request('playlists/%s/tracks' % playlist_id, ret='tracks')
+
+    def add_track_to_playlist(self, playlist_id, track_ids):
+        etag = self._request('GET', 'playlists/%s/tracks' % playlist_id).headers['ETag']
+        path = 'playlists/{plid}/tracks'.format(plid=playlist_id)
+        headers = {'if-none-match': etag}
+        data = {'trackIds': track_ids, 'toIndex': 0}
+        return self._request('POST', path, data=data, headers=headers).ok
 
     def get_playlist_videos(self, playlist_id):
         return self._map_request('playlists/%s/items' % playlist_id, ret='video')
@@ -178,7 +292,7 @@ class Session(object):
         return self._map_request('artists/%s/videos' % artist_id, ret='videos')
 
     def get_artist_bio(self, artist_id):
-        return self.request('GET', 'artists/%s/bio' % artist_id).json()['text']
+        return self.request('GET', 'artists/%s/bio' % artist_id)['text']
 
     def get_artist_similar(self, artist_id):
         return self._map_request('artists/%s/similar' % artist_id, ret='artists')
@@ -187,20 +301,20 @@ class Session(object):
         return self._map_request('artists/%s/radio' % artist_id, params={'limit': 100}, ret='tracks')
 
     def get_featured(self):
-        items = self.request('GET', 'promotions').json()['items']
+        items = self.request('GET', 'promotions')['items']
         return [_parse_featured_playlist(item) for item in items if item['type'] == 'PLAYLIST']
 
     def get_featured_items(self, content_type, group):
         return self._map_request('/'.join(['featured', group, content_type]), ret=content_type)
 
     def get_moods(self):
-        return map(_parse_moods, self.request('GET', 'moods').json())
+        return map(_parse_moods, self.request('GET', 'moods'))
 
     def get_mood_playlists(self, mood_id):
         return self._map_request('/'.join(['moods', mood_id, 'playlists']), ret='playlists')
 
     def get_genres(self):
-        return map(_parse_genres, self.request('GET', 'genres').json())
+        return map(_parse_genres, self.request('GET', 'genres'))
 
     def get_genre_items(self, genre_id, content_type):
         return self._map_request('/'.join(['genres', genre_id, content_type]), ret=content_type)
@@ -215,7 +329,9 @@ class Session(object):
         return self._map_request('videos/%s' % video_id, ret='video')
 
     def _map_request(self, url, params=None, ret=None):
-        json_obj = self.request('GET', url, params).json()
+        json_obj = self.request('GET', url, params)
+        if not json_obj:
+            return [] if ret.endswith('s') else None
         parse = None
         if ret.startswith('artist'):
             parse = _parse_artist
@@ -253,7 +369,7 @@ class Session(object):
     def get_media_url(self, track_id):
         params = {'soundQuality': self._config.quality}
         r = self.request('GET', 'tracks/%s/streamUrl' % track_id, params)
-        return r.json()['url']
+        return r['url']
 
     def get_track_url(self, track_id):
         return self.get_media_url(track_id)
@@ -265,7 +381,7 @@ class Session(object):
             'assetpresentation': 'FULL'
         }
         request = self.request('GET', 'videos/%s/urlpostpaywall' % video_id, params)
-        return request.json()['urls'][0]
+        return request['urls'][0]
 
     def search(self, field, value, limit=50):
         params = {
@@ -295,9 +411,9 @@ def _parse_artists(json_obj):
 
 def _parse_album(json_obj, artist=None, artists=None):
     if artist is None:
-        artist = _parse_artist(json_obj['artist'])
+        artist = _parse_artist(json_obj.get('artist'))
     if artists is None:
-        artists = _parse_artists(json_obj['artists'])
+        artists = _parse_artists(json_obj.get('artists'))
     kwargs = {
         'id': json_obj['id'],
         'name': json_obj['title'],
@@ -338,11 +454,15 @@ def _parse_playlist(json_obj):
 
 
 def _parse_media(json_obj):
-    artist = _parse_artist(json_obj['artist'])
-    artists = _parse_artists(json_obj['artists'])
-    album = None
-    if json_obj['album']:
-        album = _parse_album(json_obj['album'], artist, artists)
+    artists = _parse_artists(json_obj.get('artists', []))
+    artist = json_obj.get('artist')
+    if artist:
+        artist = _parse_artist(artist)
+    else:
+        artist = next((i for i in artists if i.role.main), None)
+    album = json_obj.get('album')
+    if album:
+        album = _parse_album(album, artist, artists)
 
     kwargs = {
         'id': json_obj['id'],
@@ -357,6 +477,11 @@ def _parse_media(json_obj):
         'album': album,
         'available': bool(json_obj['streamReady']),
         'type': json_obj.get('type'),
+        'quality': json_obj.get('audioQuality'),
+        'replay_gain': json_obj.get('replayGain', 0),
+        'peak': json_obj.get('peak', 1),
+        'explicit': json_obj.get('explicit', False),
+        'release_date': json_obj.get('album', {}).get('releaseDate', ''),
     }
 
     if kwargs['type'] == 'Music Video':
@@ -411,7 +536,7 @@ class Favorites(object):
 
     def tracks(self):
         request = self._session.request('GET', self._base_url + '/tracks')
-        return [_parse_media(item['item']) for item in request.json()['items']]
+        return [_parse_media(item['item']) for item in request['items']]
 
 
 class User(object):
@@ -421,6 +546,7 @@ class User(object):
         """
         :type session: :class:`Session`
         :param id: The user ID
+
         """
         self._session = session
         self.id = id
