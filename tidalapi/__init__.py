@@ -197,6 +197,7 @@ class Session(object):
             return resp
 
     def _request(self, method, path, params=None, data=None, headers=None):
+        logging.debug("REQUEST: %s", path)
         request_params = {
             'limit': '999',
             'deviceType': 'PHONE',
@@ -212,7 +213,6 @@ class Session(object):
         })
         url = urljoin(self._config.api_location, path)
         request = requests.request(method, url, headers=request_headers, params=request_params, data=data)
-        log.debug("oauth request: %s", request.request.url)
         try:
             request.raise_for_status()
         except HTTPError as e:
