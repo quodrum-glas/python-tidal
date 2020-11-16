@@ -224,10 +224,10 @@ class Session(object):
                     return self.request(method, path, params, data, headers)
                 log.info("Token not expired yet. Valid until: {}".format(
                     datetime.datetime.fromtimestamp(self.token_expiry).isoformat()))
-                return
+                raise NotImplementedError
             if request.status_code == 404:
                 log.error(e)
-                return
+                raise NotImplementedError
             raise
         if request.content:
             log.debug("Response: %s", json.dumps(request.json(), indent=4))
