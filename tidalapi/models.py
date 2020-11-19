@@ -20,12 +20,13 @@
 from __future__ import unicode_literals
 from enum import Enum
 
-IMG_URL = "http://images.osl.wimpmusic.com/im/im?w={width}&h={height}&{id_type}={id}"
+IMG_URL = "https://resources.tidal.com/images/{uuid}/{width}x{height}.jpg"
 
 
 class Model(object):
     id = None
     name = None
+    img_uuid = None
 
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
@@ -39,8 +40,8 @@ class Album(Model):
     release_date = None
 
     @property
-    def image(self, width=1280, height=1280):
-        return IMG_URL.format(width=width, height=height, id=self.id, id_type='albumid')
+    def image(self):
+        return self.picture(1280, 1280)
 
     def picture(self, width, height):
         """
@@ -53,7 +54,9 @@ class Album(Model):
 
         Original sizes: 80x80, 160x160, 320x320, 640x640 and 1280x1280
         """
-        return IMG_URL.format(width=width, height=height, id=self.id, id_type='albumid')
+        if self.img_uuid:
+            uuid = self.img_uuid.replace('-', '/')
+            return IMG_URL.format(uuid=uuid, width=width, height=height)
 
 
 class Artist(Model):
@@ -61,21 +64,23 @@ class Artist(Model):
     role = None
 
     @property
-    def image(self, width=1280, height=1280):
-        return IMG_URL.format(width=width, height=height, id=self.id, id_type='artistid')
+    def image(self):
+        return self.picture(480, 480)
 
     def picture(self, width, height):
         """
         A url to an artist picture
 
-        :param width: pixel width, maximum 2000
+        :param width: pixel width, maximum 480
         :type width: int
-        :param height: pixel height, maximum 2000
+        :param height: pixel height, maximum 480
         :type height: int
 
-        Original sizes: 80x80, 160x160, 320x320, 480x480, 640x640, 1280x1280
+        Original sizes: 80x80, 160x160, 320x320, 480x480
         """
-        return IMG_URL.format(width=width, height=height, id=self.id, id_type='artistid')
+        if self.img_uuid:
+            uuid = self.img_uuid.replace('-', '/')
+            return IMG_URL.format(uuid=uuid, width=width, height=height)
 
 
 class Playlist(Model):
@@ -89,22 +94,24 @@ class Playlist(Model):
     duration = -1
 
     @property
-    def image(self, width=1080, height=1080):
-        return IMG_URL.format(width=width, height=height, id=self.id, id_type='uuid')
+    def image(self):
+        return self.picture(1080, 1080)
 
     def picture(self, width, height):
         """
         A url to a playlist picture
 
-        :param width: pixel width, maximum 2000
+        :param width: pixel width, maximum 1080
         :type width: int
-        :param height: pixel height, maximum 2000
+        :param height: pixel height, maximum 1080
         :type height: int
 
         Original sizes: 160x160, 320x320, 480x480, 640x640, 750x750, 1080x1080
 
         """
-        return IMG_URL.format(width=width, height=height, id=self.id, id_type='uuid')
+        if self.img_uuid:
+            uuid = self.img_uuid.replace('-', '/')
+            return IMG_URL.format(uuid=uuid, width=width, height=height)
 
 
 class Media(Model):

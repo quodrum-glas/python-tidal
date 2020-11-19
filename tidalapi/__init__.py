@@ -32,7 +32,7 @@ import logging
 import requests
 from requests.exceptions import HTTPError
 
-from .models import Artist, Album, Track, Video, Playlist, SearchResult, Category, Role
+from .models import Artist, Album, Track, Video, Playlist, SearchResult, Category, Role, IMG_URL
 
 try:
     from urlparse import parse_qs, urljoin, urlsplit
@@ -75,7 +75,6 @@ class Config(object):
 
 class Session(object):
     _redirect_uri = "https://tidal.com/android/login/auth"  # or tidal://login/auth
-    _api_base_url = "https://api.tidal.com/"
     _oauth_authorize_url = "https://login.tidal.com/authorize"
     _oauth_token_url = "https://auth.tidal.com/v1/oauth2/token"
 
@@ -197,7 +196,7 @@ class Session(object):
             return resp
 
     def _request(self, method, path, params=None, data=None, headers=None):
-        logging.debug("REQUEST: %s", path)
+        logging.debug("REQUEST: %s %s", method, path)
         request_params = {
             'limit': '999',
             'deviceType': 'PHONE',
@@ -244,13 +243,6 @@ class Session(object):
 
     def get_playlist_tracks(self, playlist_id):
         return self._map_request('playlists/%s/tracks' % playlist_id, ret='tracks')
-
-    def add_track_to_playlist(self, playlist_id, track_ids):
-        etag = self._request('GET', 'playlists/%s/tracks' % playlist_id).headers['ETag']
-        path = 'playlists/{plid}/tracks'.format(plid=playlist_id)
-        headers = {'if-none-match': etag}
-        data = {'trackIds': track_ids, 'toIndex': 0}
-        return self._request('POST', path, data=data, headers=headers).ok
 
     def get_playlist_videos(self, playlist_id):
         return self._map_request('playlists/%s/items' % playlist_id, ret='video')
@@ -402,7 +394,13 @@ def _parse_artist(json_obj):
     for role in json_obj.get('artistTypes', [json_obj.get('type')]):
         roles.append(Role(role))
 
-    return Artist(id=json_obj['id'], name=json_obj['name'], roles=roles, role=roles[0])
+    return Artist(
+        id=json_obj['id'],
+        name=json_obj['name'],
+        img_uuid=json_obj.get('picture'),
+        roles=roles,
+        role=roles[0]
+    )
 
 
 def _parse_artists(json_obj):
@@ -417,6 +415,7 @@ def _parse_album(json_obj, artist=None, artists=None):
     kwargs = {
         'id': json_obj['id'],
         'name': json_obj['title'],
+        'img_uuid': json_obj.get('cover'),
         'num_tracks': json_obj.get('numberOfTracks'),
         'num_discs': json_obj.get('numberOfVolumes'),
         'duration': json_obj.get('duration'),
@@ -444,6 +443,7 @@ def _parse_playlist(json_obj):
     kwargs = {
         'id': json_obj['uuid'],
         'name': json_obj['title'],
+        'img_uuid': json_obj.get('squareImage'),
         'description': json_obj['description'],
         'num_tracks': int(json_obj['numberOfTracks']),
         'duration': int(json_obj['duration']),
@@ -490,14 +490,14 @@ def _parse_media(json_obj):
 
 
 def _parse_genres(json_obj):
-    image = "http://resources.wimpmusic.com/images/%s/460x306.jpg" \
-            % json_obj['image'].replace('-', '/')
+    image = json_obj.get('image')
+    image = IMG_URL.format(uuid=image.replace('-', '/'), width=480, height=480) if image else None
     return Category(id=json_obj['path'], name=json_obj['name'], image=image)
 
 
 def _parse_moods(json_obj):
-    image = "http://resources.wimpmusic.com/images/%s/342x342.jpg" \
-            % json_obj['image'].replace('-', '/')
+    image = json_obj.get('image')
+    image = IMG_URL.format(uuid=image.replace('-', '/'), width=480, height=480) if image else None
     return Category(id=json_obj['path'], name=json_obj['name'], image=image)
 
 
@@ -546,7 +546,6 @@ class User(object):
         """
         :type session: :class:`Session`
         :param id: The user ID
-
         """
         self._session = session
         self.id = id
@@ -554,3 +553,30 @@ class User(object):
 
     def playlists(self):
         return self._session.get_user_playlists(self.id)
+
+    def add_playlist(self, title, description):
+        path = 'users/{uid}/playlists'.format(uid=self.id)
+        return self._session.request('POST', path, data={'title': title, 'description': description})
+
+    def add_tracks_to_playlist(self, playlist_id, track_id_list, to_index=0):
+        path = 'playlists/{plid}'.format(plid=playlist_id)
+        etag = self._session._request('GET', path).headers['ETag']
+        path = 'playlists/{plid}/tracks'.format(plid=playlist_id)
+        headers = {'if-none-match': etag}
+        data = {'trackIds': ",".join(track_id_list), 'toIndex': to_index}
+        return self._session._request('POST', path, data=data, headers=headers)
+
+    def delete_playlist_item(self, item_index, playlist_id):
+        path = 'playlists/{plid}/tracks'.format(plid=playlist_id)
+        etag = self._session._request('GET', path).headers['ETag']
+        headers = {'if-none-match': etag}
+        path = 'playlists/{plid}/items/{index}'.format(plid=playlist_id, index=item_index)
+        params = {'order': 'INDEX', 'orderDirection': 'ASC'}
+        return self._session.request('DELETE', path, headers=headers, params=params)
+
+    def delete_playlist(self, playlist_id):
+        path = 'playlists/{plid}'.format(plid=playlist_id)
+        etag = self._session._request('GET', path).headers['ETag']
+        headers = {'if-none-match': etag}
+        return self._session._request('DELETE', path, headers=headers)
+
