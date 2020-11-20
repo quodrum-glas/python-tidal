@@ -21,14 +21,14 @@ import logging
 import os
 import pytest
 import requests
-import tidalapi
+import tidaloauth4mopidy
 
 logging.basicConfig(level=logging.DEBUG)
 
 
 @pytest.fixture(scope='session')
 def session():
-    session = tidalapi.Session()
+    session = tidaloauth4mopidy.Session()
     username = os.getenv("TIDAL_USERNAME")
     password = os.getenv("TIDAL_PASSWORD")
     session.login(username, password)
@@ -126,19 +126,19 @@ def test_search(session):
 def test_artist_picture(session):
     artist = session.get_artist(16147)
     assert requests.get(artist.picture(640,640)).status_code == 200
-    assert requests.get(tidalapi.models.Artist.image.fget(artist, 640, 640)).status_code == 200
+    assert requests.get(tidaloauth4mopidy.models.Artist.image.fget(artist, 640, 640)).status_code == 200
 
 
 def test_album_picture(session):
     album = session.get_album(17925106)
     assert requests.get(album.picture(640, 640)).status_code == 200
-    assert requests.get(tidalapi.models.Album.image.fget(album, 640, 640)).status_code == 200
+    assert requests.get(tidaloauth4mopidy.models.Album.image.fget(album, 640, 640)).status_code == 200
 
 
 def test_playlist_picture(session):
     playlist = session.get_playlist('33136f5a-d93a-4469-9353-8365897aaf94')
     assert requests.get(playlist.picture(750, 750)).status_code == 200
-    assert requests.get(tidalapi.models.Playlist.image.fget(playlist, 750, 750)).status_code == 200
+    assert requests.get(tidaloauth4mopidy.models.Playlist.image.fget(playlist, 750, 750)).status_code == 200
 
 
 def test_get_track_url(session):
@@ -158,7 +158,7 @@ def test_load_session(session):
     user_id = session.user.id
     country_code = session.country_code
     session_id = session.session_id
-    session = tidalapi.Session()
+    session = tidaloauth4mopidy.Session()
     session.load_session(session_id)
     assert user_id == session.user.id
     assert country_code == session.country_code

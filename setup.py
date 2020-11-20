@@ -5,29 +5,30 @@ from setuptools import setup
 import sys
 
 required = ['requests']
-if sys.version_info < (3,4):
+if sys.version_info < (3, 4):
     required.append('enum34')
 
 long_description = ""
-with open('README.rst') as f:
+with open('README.md') as f:
     long_description += f.read()
 
-with open('HISTORY.rst') as f:
+with open('HISTORY.md') as f:
     long_description += '\n\n'
-    long_description += f.read() .replace('.. :changelog:', '')
+    long_description += f.read()
 
 setup(
-    name='tidalapi',
-    version='0.6.7',
+    name='tidaloauth4mopidy',
+    version='0.2.0',
     description='Unofficial API for TIDAL music streaming service.',
     long_description=long_description,
+    long_description_content_type="text/markdown",
     author='Thomas Amland',
     author_email='thomas.amland@googlemail.com',
-    maintainer='morguldir',
-    maintainer_email='morguldir@protonmail.com',
-    url='https://github.com/tamland/python-tidal',
+    maintainer='quodrumglas',
+    maintainer_email='quodrumglas@email.com',
+    url='https://github.com/quodrum-glas/python-tidal',
     license='LGPL',
-    packages=['tidalapi'],
+    packages=['tidaloauth4mopidy'],
     install_requires=required,
     keywords='',
     classifiers=[
