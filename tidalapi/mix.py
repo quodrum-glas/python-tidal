@@ -43,9 +43,10 @@ class MixType(Enum):
     discovery = "DISCOVERY_MIX"
     new_release = "NEW_RELEASE_MIX"
     track = "TRACK_MIX"
+    master_track = "MASTER_TRACK_MIX"
     artist = "ARTIST_MIX"
     songwriter = "SONGWRITER_MIX"
-    producter = "PRODUCER_MIX"
+    producer = "PRODUCER_MIX"
     history_alltime = "HISTORY_ALLTIME_MIX"
     history_monthly = "HISTORY_MONTHLY_MIX"
     history_yearly = "HISTORY_YEARLY_MIX"
@@ -70,6 +71,7 @@ class Mix:
     sub_title: str = ""
     sharing_images = None
     mix_type: Optional[MixType] = None
+    updated = None
     content_behaviour: str = ""
     short_subtitle: str = ""
     images: Optional[ImageResponse] = None
@@ -112,14 +114,16 @@ class Mix:
         self.sub_title = json_obj["subTitle"]
         self.sharing_images = json_obj["sharingImages"]
         self.mix_type = MixType(json_obj["mixType"])
-        self.content_behaviour = json_obj["contentBehavior"]
-        self.short_subtitle = json_obj["shortSubtitle"]
+        self.content_behaviour = json_obj.get("contentBehavior")
+        self.short_subtitle = json_obj.get("shortSubtitle")
         images = json_obj["images"]
         self.images = ImageResponse(
             small=images["SMALL"]["url"],
             medium=images["MEDIUM"]["url"],
             large=images["LARGE"]["url"],
         )
+        updated = json_obj.get("updated")
+        self.updated = dateutil.parser.isoparse(updated) if updated else None
 
         return copy.copy(self)
 
