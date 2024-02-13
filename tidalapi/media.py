@@ -254,6 +254,15 @@ class Track(Media):
         assert not isinstance(stream, list)
         return cast("Stream", stream)
 
+    def get_track_mix(self):
+        """Queries TIDAL for the track mix, which is a mix of tracks that are similar to
+        this track. Could be just an alias to radio.
+
+        :return: A list of :class:`Tracks <tidalapi.media.Track>`
+        """
+        mix_id = self.requests.request("GET", "tracks/%s/mix" % self.id).json()["id"]
+        return self.session.mix(mix_id)
+
 
 class Stream:
     """An object that stores the audio file properties and parameters needed for
