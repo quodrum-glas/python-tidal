@@ -468,7 +468,7 @@ class Session:
             log.info("TIDAL Login KO")
             return False
 
-    def login_pkce(self, fn_print: Callable[[str], None] = print) -> None:
+    def login_pkce(self, fn_print: Callable[[str], None] = print, fn_input: Callable[[str], None] = input) -> None:
         """Login handler for PKCE based authentication. This is the only way how to get
         access to HiRes (Up to 24-bit, 192 kHz) FLAC files.
 
@@ -493,7 +493,7 @@ class Session:
         fn_print(url_login)
 
         # Get redirect URL from user input.
-        url_redirect: str = input("Paste 'Ooops' page URL here and press <ENTER>:")
+        url_redirect: str = fn_input("Paste 'Ooops' page URL here and press <ENTER>:")
         # Query for auth tokens
         json: dict[str, Union[str, int]] = self.pkce_get_auth_token(url_redirect)
 
