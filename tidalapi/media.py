@@ -185,16 +185,11 @@ class Media:
 
         :return:
         """
-        artists = self.session.parse_artists(json_obj["artists"])
-
-        # Sometimes the artist field is not filled, example: 62300893
-        if "artist" in json_obj:
-            artist = self.session.parse_artist(json_obj["artist"])
-        else:
-            artist = artists[0]
+        artists = self.session.parse_artists(json_obj.get("artists", []))
+        artist = self.session.parse_artist(json_obj.get("artist", next(iter(artists), None)))
 
         album = None
-        if json_obj["album"]:
+        if json_obj.get("album"):
             album = self.session.album().parse(json_obj["album"], artist, artists)
 
         self.id = json_obj["id"]
