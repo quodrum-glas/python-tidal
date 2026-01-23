@@ -26,6 +26,7 @@ from abc import abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Dict, List, Optional, Union, cast
+from xml.dom import minidom
 
 import dateutil.parser
 
@@ -771,9 +772,22 @@ class DashInfo:
         except Exception as e:
             raise ManifestDecodeError from e
 
+    @staticmethod
+    def _normalize_mpd_xml(mpd_xml: str) -> str:
+        ### Tidal introduced AdaptationSet group value outside of standard int, causing parsing issues
+        mpd_doc = minidom.parseString(mpd_xml)
+        for e in mpd_doc.getElementsByTagName("AdaptationSet"):
+            e.setAttribute("group", str(hash(e.getAttribute("group"))))
+        mpd_xml = mpd_doc.toxml(encoding=mpd_doc.encoding)
+        try:
+            mpd_xml = mpd_xml.decode(mpd_doc.encoding)
+        except AttributeError:
+            pass
+        return mpd_xml
+
     def __init__(self, mpd_xml):
         mpd = MPEGDASHParser.parse(
-            mpd_xml.split("<?xml version='1.0' encoding='UTF-8'?>")[1]
+            self._normalize_mpd_xml(mpd_xml)
         )
 
         self.duration = parse_duration(mpd.media_presentation_duration)

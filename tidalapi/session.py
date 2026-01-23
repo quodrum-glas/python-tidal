@@ -45,7 +45,6 @@ from typing import (
 )
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-import pyaes
 import requests
 from requests.exceptions import HTTPError
 
