@@ -323,6 +323,19 @@ class MixV2:
 
         return copy.copy(self)
 
+    def items(self) -> List[Any]:
+        """Returns all the items in the mix, retrieves them with :class:`get` as well if
+        not already done.
+
+        :return: A :class:`list` of videos and/or tracks from the mix
+        """
+        if not self._retrieved:
+            self.get(self.id)
+        if not self._items:
+            raise ValueError("Retrieved items missing")
+        return self._items
+
+
     def image(self, dimensions: int = 320) -> str:
         """A URL to a Mix picture.
 
