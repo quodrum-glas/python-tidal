@@ -90,3 +90,4 @@ tidal*.json
 
 # Local devtools
 devtools
+/tidalapi.iml
