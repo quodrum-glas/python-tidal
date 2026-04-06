@@ -1,20 +1,33 @@
-"""Base model: parsed fields + raw dict + session ref."""
+"""Base model: thin typed view over a JSON:API Resource + Document + Client."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ..jsonapi import Document, Resource
+
 if TYPE_CHECKING:
-    from ..session import Session
+    from ..client import Client
 
 
-class _Model:
-    __slots__ = ("raw", "_session")
+class Model:
+    """Thin view over a JSON:API Resource + Document, with Client for lazy fetches."""
 
-    def __init__(self, raw: dict[str, Any], session: Session):
-        self.raw = raw
-        self._session = session
+    __slots__ = ("_r", "_doc", "_client")
 
-    def __repr__(self):
-        label = getattr(self, "name", None) or getattr(self, "title", None) or ""
-        return f"<{type(self).__name__} {getattr(self, 'id', '?')}: {label}>"
+    def __init__(self, resource: Resource, doc: Document, client: Client) -> None:
+        self._r = resource
+        self._doc = doc
+        self._client = client
+
+    @property
+    def id(self) -> str:
+        return self._r.id
+
+    @property
+    def _a(self) -> dict[str, Any]:
+        return self._r.attributes
+
+    def __repr__(self) -> str:
+        label = self._a.get("title") or self._a.get("name") or ""
+        return f"<{type(self).__name__} {self.id}: {label}>"

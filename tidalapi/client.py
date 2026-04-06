@@ -130,16 +130,20 @@ class Client:
 
     # -- convenience for the three API surfaces ---------------------------
 
-    def v1(self, path: str, params: dict | None = None) -> Any:
+    def v1(self, path: str, params: dict | None = None, method: str = "GET", **kw) -> Any:
         p = {"countryCode": self.country_code, **(params or {})}
-        return self.get(f"{BASE_V1}{path}", params=p)
+        resp = self.request(method, f"{BASE_V1}{path}", params=p, **kw)
+        return resp.json() if resp.content else None
 
-    def v2(self, path: str, params: dict | None = None) -> Any:
+    def v2(self, path: str, params: dict | None = None, method: str = "GET", **kw) -> Any:
         p = {"countryCode": self.country_code, **(params or {})}
-        return self.get(f"{BASE_V2}{path}", params=p)
+        resp = self.request(method, f"{BASE_V2}{path}", params=p, **kw)
+        return resp.json() if resp.content else None
 
-    def oapi(self, path: str, params: dict | None = None) -> Any:
-        return self.get(f"{BASE_OPENAPI}{path}", params=params)
+    def oapi(self, path: str, params: dict | None = None, method: str = "GET", **kw) -> Any:
+        # logging.getLogger("mopidy_tidal.oapi").warning("%s %s %s", method, path, params)
+        resp = self.request(method, f"{BASE_OPENAPI}{path}", params=params, **kw)
+        return resp.json() if resp.content else None
 
     # -- images -----------------------------------------------------------
 

@@ -14,8 +14,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from .client import Client
-from .exceptions import ManifestError, StreamError
+from ..client import Client
+from ..exceptions import ManifestError, StreamError
 
 
 class Quality(str, Enum):
@@ -23,6 +23,7 @@ class Quality(str, Enum):
     HIGH = "HIGH"
     LOSSLESS = "LOSSLESS"
     HI_RES_LOSSLESS = "HI_RES_LOSSLESS"
+    HIRES_LOSSLESS = "HIRES_LOSSLESS"
     # Compat aliases (python-tidal style)
     hi_res_lossless = "HI_RES_LOSSLESS"
 
@@ -199,19 +200,18 @@ def get_stream_oapi(client: Client, track_id: int, quality: Quality | str = Qual
     """Fetch stream via OpenAPI v2 trackManifests endpoint."""
     q = Quality(quality) if isinstance(quality, str) else quality
     formats = _OAPI_FORMATS.get(q, ["AACLC", "HEAACV1", "FLAC"])
-    # OpenAPI expects repeated params, not comma-separated
-    params = [
-        ("adaptive", "true"),
-        ("manifestType", "MPEG_DASH"),
-        ("uriScheme", "DATA"),
-        ("usage", "PLAYBACK"),
-    ]
-    for f in formats:
-        params.append(("formats", f))
+    
+    # Build params dict with repeated formats
+    params = {
+        "adaptive": "true",
+        "manifestType": "MPEG_DASH",
+        "uriScheme": "DATA",
+        "usage": "PLAYBACK",
+        "formats": formats,  # oapi method will handle repeated params
+    }
 
-    from .client import BASE_OPENAPI
-    resp = client.request("GET", f"{BASE_OPENAPI}trackManifests/{track_id}", params=params)
-    raw_outer = resp.json()
+    resp = client.oapi(f"trackManifests/{track_id}", params=params)
+    raw_outer = resp
     attrs = raw_outer.get("data", {}).get("attributes", {})
 
     # uri is "data:{mime};base64,{payload}"

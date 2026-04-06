@@ -1,47 +1,45 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from ._base import _Model
+from ..types import VideoRel, parse_iso_duration
+from ._base import Model
 
 if TYPE_CHECKING:
-    from ..session import Session
-    from .album import Album
     from .artist import Artist
 
 
-class Video(_Model):
-    __slots__ = (
-        "id", "title", "name", "duration", "artist", "artists",
-        "album", "image_id", "quality", "explicit",
-    )
+class Video(Model):
+    __slots__ = ()
 
-    def __init__(self, raw: dict[str, Any], session: Session):
-        super().__init__(raw, session)
-        from .album import Album as _Album
-        from .artist import Artist as _Artist
+    @property
+    def title(self) -> str:
+        return self._a.get("title", "")
 
-        self.id: int = raw["id"]
-        self.title: str = raw.get("title", "")
-        self.name: str = self.title
-        self.duration: int = raw.get("duration", 0)
-        self.explicit: bool = bool(raw.get("explicit"))
-        self.image_id: str = raw.get("imageId", "")
-        self.quality: str = raw.get("quality", "")
+    @property
+    def name(self) -> str:
+        return self.title
 
-        artists_raw = raw.get("artists") or []
-        self.artists: list[Artist] = [_Artist(a, session) for a in artists_raw]
-        self.artist: Artist | None = self.artists[0] if self.artists else (
-            _Artist(raw["artist"], session) if raw.get("artist") else None
-        )
-        album_raw = raw.get("album")
-        self.album: Album | None = _Album(album_raw, session) if album_raw else None
+    @property
+    def duration(self) -> int:
+        return parse_iso_duration(self._a.get("duration", ""))
 
-    def get_url(self, quality: str = "HIGH") -> str:
-        from ..stream import get_video_url
-        return get_video_url(self._session.client, self.id, quality)
+    @property
+    def explicit(self) -> bool:
+        return bool(self._a.get("explicit"))
 
-    def image(self, w: int = 750, h: int = 500) -> str:
-        if not self.image_id:
-            raise AttributeError("No image available")
-        return f"https://resources.tidal.com/images/{self.image_id.replace('-', '/')}/{w}x{h}.jpg"
+    # -- relationships --
+
+    @property
+    def artists(self) -> list[Artist]:
+        from .artist import Artist
+        return [Artist(r, self._doc, self._client) for r in self._doc.related(VideoRel.ARTISTS, self._r)]
+
+    @property
+    def artist(self) -> Artist | None:
+        a = self.artists
+        return a[0] if a else None
+
+    @property
+    def thumbnail_url(self) -> str:
+        return self._r.artwork_url(VideoRel.THUMBNAIL_ART, self._doc)

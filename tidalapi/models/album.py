@@ -2,65 +2,97 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ._base import _Model
+from ..jsonapi import Document, Resource
+from ..types import AlbumRel, ResourceType, parse_iso_duration
+from ._base import Model
 
 if TYPE_CHECKING:
-    from ..session import Session
     from .artist import Artist
     from .track import Track
 
 
-class Album(_Model):
-    __slots__ = (
-        "id", "title", "name", "num_tracks", "num_volumes", "duration",
-        "explicit", "release_date", "tidal_release_date", "cover",
-        "artist", "artists", "audio_quality", "popularity", "type",
-        "audio_modes",
-    )
+class Album(Model):
+    __slots__ = ()
 
-    def __init__(self, raw: dict[str, Any], session: Session):
-        super().__init__(raw, session)
-        from .artist import Artist as _Artist
+    @property
+    def title(self) -> str:
+        return self._a.get("title", "")
 
-        self.id: int = raw["id"]
-        self.title: str = raw.get("title", "")
-        self.name: str = self.title
-        self.num_tracks: int = raw.get("numberOfTracks", 0)
-        self.num_volumes: int = raw.get("numberOfVolumes", 1)
-        self.duration: int = raw.get("duration", 0)
-        self.explicit: bool = bool(raw.get("explicit"))
-        self.release_date: str = raw.get("releaseDate", "")
-        self.tidal_release_date: str = raw.get("tidalReleaseDate", self.release_date)
-        self.cover: str = raw.get("cover", "")
-        self.audio_quality: str = raw.get("audioQuality", "")
-        self.audio_modes: list[str] = raw.get("audioModes") or []
-        self.popularity: int = raw.get("popularity", 0)
-        self.type: str = raw.get("type", "")
+    @property
+    def name(self) -> str:
+        return self.title
 
-        artists_raw = raw.get("artists") or []
-        self.artists: list[Artist] = [_Artist(a, session) for a in artists_raw]
-        artist_raw = raw.get("artist")
-        self.artist: Artist | None = (
-            self.artists[0] if self.artists
-            else _Artist(artist_raw, session) if artist_raw
-            else None
-        )
+    @property
+    def num_tracks(self) -> int:
+        return self._a.get("numberOfItems", 0)
 
-    def tracks(self, limit: int = 100) -> list[Track]:
-        return self._session.get_album_tracks(self.id, limit)
+    @property
+    def num_volumes(self) -> int:
+        return self._a.get("numberOfVolumes", 1)
 
-    def image(self, size: int = 320) -> str:
-        if not self.cover:
-            return ""
-        return f"https://resources.tidal.com/images/{self.cover.replace('-', '/')}/{size}x{size}.jpg"
+    @property
+    def duration(self) -> int:
+        return parse_iso_duration(self._a.get("duration", ""))
 
-    def get_page(self):
-        return self._session.get_album_page(self.id)
+    @property
+    def explicit(self) -> bool:
+        return bool(self._a.get("explicit"))
 
-    def similar(self) -> list[Album]:
-        """Similar albums. Returns empty list if unavailable."""
-        try:
-            raw = self._session.client.v1(f"albums/{self.id}/similar")
-            return [Album(a, self._session) for a in raw.get("items", raw if isinstance(raw, list) else [])]
-        except Exception:
-            return []
+    @property
+    def release_date(self) -> str:
+        return self._a.get("releaseDate", "")
+
+    @property
+    def popularity(self) -> float:
+        return self._a.get("popularity", 0.0)
+
+    @property
+    def media_tags(self) -> list[str]:
+        return self._a.get("mediaTags") or []
+
+    @property
+    def album_type(self) -> str:
+        return self._a.get("albumType", "")
+
+    @property
+    def barcode(self) -> str:
+        return self._a.get("barcodeId", "")
+
+    # -- relationships --
+
+    @property
+    def artists(self) -> list[Artist]:
+        from .artist import Artist
+        return [Artist(r, self._doc, self._client) for r in self._doc.related(AlbumRel.ARTISTS, self._r)]
+
+    @property
+    def artist(self) -> Artist | None:
+        a = self.artists
+        return a[0] if a else None
+
+    @property
+    def tracks(self) -> list[Track]:
+        from .track import Track
+        return [
+            _track_with_meta(r, meta, self._doc, self._client)
+            for r, meta in self._doc.related_with_meta(AlbumRel.ITEMS, self._r)
+            if r.type == ResourceType.TRACKS or r.type == "tracks"
+        ]
+
+    @property
+    def similar_albums(self) -> list[Album]:
+        return [Album(r, self._doc, self._client) for r in self._doc.related(AlbumRel.SIMILAR_ALBUMS, self._r)]
+
+    @property
+    def cover_url(self) -> str:
+        return self._r.artwork_url(AlbumRel.COVER_ART, self._doc)
+
+    def cover(self, size: int = 320) -> str:
+        return self._r.artwork_url(AlbumRel.COVER_ART, self._doc, size)
+
+
+def _track_with_meta(resource: Resource, meta: dict[str, Any], doc: Document, client: object) -> Track:
+    from .track import Track
+    if meta:
+        resource.meta = {**resource.meta, **meta}
+    return Track(resource, doc, client)

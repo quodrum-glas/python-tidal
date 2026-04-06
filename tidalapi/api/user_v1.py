@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .client import Client, BASE_V2
-from .models import Album, Artist, Mix, Playlist, Track, Video
+from ..client import Client
+from ..models_v1 import Album, Artist, Mix, Playlist, Track, Video
 
 if TYPE_CHECKING:
-    from .session import Session
+    from ..session import Session
 
 
 class Favorites:
@@ -48,16 +48,12 @@ class Favorites:
         return [Mix(i, self._s) for i in raw.get("items", [])]
 
     def add_mix(self, mix_id: str) -> bool:
-        return self._c.request(
-            "POST", f"{BASE_V2}favorites/mixes/add",
-            params={"mixId": mix_id, "countryCode": self._c.country_code},
-        ).ok
+        resp = self._c.v2("favorites/mixes/add", {"mixId": mix_id}, method="POST")
+        return resp is not None
 
     def remove_mix(self, mix_id: str) -> bool:
-        return self._c.delete(
-            f"{BASE_V2}favorites/mixes/remove",
-            params={"mixIds": mix_id, "countryCode": self._c.country_code},
-        ).ok
+        resp = self._c.v2("favorites/mixes/remove", {"mixIds": mix_id}, method="DELETE")
+        return resp is not None
 
     # -- paginated reads --------------------------------------------------
 
@@ -100,28 +96,26 @@ class Favorites:
     # -- remove -----------------------------------------------------------
 
     def remove_track(self, track_id: int | str) -> bool:
-        return self._c.delete(f"https://api.tidal.com/v1/{self._base}/tracks/{track_id}",
-                              params={"countryCode": self._c.country_code}).ok
+        resp = self._c.v1(f"{self._base}/tracks/{track_id}", method="DELETE")
+        return resp is not None
 
     def remove_album(self, album_id: int | str) -> bool:
-        return self._c.delete(f"https://api.tidal.com/v1/{self._base}/albums/{album_id}",
-                              params={"countryCode": self._c.country_code}).ok
+        resp = self._c.v1(f"{self._base}/albums/{album_id}", method="DELETE")
+        return resp is not None
 
     def remove_artist(self, artist_id: int | str) -> bool:
-        return self._c.delete(f"https://api.tidal.com/v1/{self._base}/artists/{artist_id}",
-                              params={"countryCode": self._c.country_code}).ok
+        resp = self._c.v1(f"{self._base}/artists/{artist_id}", method="DELETE")
+        return resp is not None
 
     def remove_video(self, video_id: int | str) -> bool:
-        return self._c.delete(f"https://api.tidal.com/v1/{self._base}/videos/{video_id}",
-                              params={"countryCode": self._c.country_code}).ok
+        resp = self._c.v1(f"{self._base}/videos/{video_id}", method="DELETE")
+        return resp is not None
 
     def remove_playlist(self, playlist_id: str) -> bool:
         """Remove a playlist from favorites."""
         trn = f"trn:playlist:{playlist_id}" if "trn:" not in playlist_id else playlist_id
-        return self._c.put(
-            f"{BASE_V2}my-collection/playlists/folders/remove",
-            params={"trns": trn, "countryCode": self._c.country_code},
-        ).ok
+        resp = self._c.v2("my-collection/playlists/folders/remove", {"trns": trn}, method="PUT")
+        return resp is not None
 
     def playlists(self, limit: int = 50, offset: int = 0) -> list[Playlist]:
         raw = self._c.v2("my-collection/playlists/folders", {
@@ -160,21 +154,17 @@ class PlaylistFolders:
         ]
 
     def create_playlist(self, name: str, description: str = "", folder_id: str = "root") -> dict:
-        return self._c.put(
-            f"{BASE_V2}my-collection/playlists/folders/create-playlist",
-            params={"name": name, "description": description, "folderId": folder_id,
-                    "countryCode": self._c.country_code},
-        ).json()
+        return self._c.v2("my-collection/playlists/folders/create-playlist", {
+            "name": name, "description": description, "folderId": folder_id
+        }, method="PUT")
 
     def create_folder(self, name: str, folder_id: str = "root") -> dict:
-        return self._c.put(
-            f"{BASE_V2}my-collection/playlists/folders/create-folder",
-            params={"name": name, "folderId": folder_id,
-                    "countryCode": self._c.country_code},
-        ).json()
+        return self._c.v2("my-collection/playlists/folders/create-folder", {
+            "name": name, "folderId": folder_id
+        }, method="PUT")
 
     def remove(self, trns: list[str]) -> bool:
-        return self._c.put(
-            f"{BASE_V2}my-collection/playlists/folders/remove",
-            params={"trns": ",".join(trns), "countryCode": self._c.country_code},
-        ).ok
+        resp = self._c.v2("my-collection/playlists/folders/remove", {
+            "trns": ",".join(trns)
+        }, method="PUT")
+        return resp is not None

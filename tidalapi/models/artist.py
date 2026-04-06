@@ -1,52 +1,67 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from ._base import _Model
+from ..jsonapi import Resource
+from ..types import ArtistRel
+from ._base import Model
 
 if TYPE_CHECKING:
-    from ..session import Session
     from .album import Album
     from .track import Track
+    from .video import Video
 
 
-class Artist(_Model):
-    __slots__ = ("id", "name", "picture", "popularity", "bio")
+class Artist(Model):
+    __slots__ = ()
 
-    def __init__(self, raw: dict[str, Any], session: Session):
-        super().__init__(raw, session)
-        self.id: int = raw["id"]
-        self.name: str = raw.get("name", "")
-        self.picture: str = raw.get("picture", "")
-        self.popularity: int = raw.get("popularity", 0)
-        self.bio: dict | None = None
+    @property
+    def name(self) -> str:
+        return self._a.get("name", "")
 
-    def get_albums(self, limit: int = 50) -> list[Album]:
-        return self._session.get_artist_albums(self.id, limit)
+    @property
+    def popularity(self) -> float:
+        return self._a.get("popularity", 0.0)
 
-    def get_top_tracks(self, limit: int = 10) -> list[Track]:
-        return self._session.get_artist_top_tracks(self.id, limit)
+    # -- relationships --
 
-    def get_page(self):
-        return self._session.get_artist_page(self.id)
+    @property
+    def albums(self) -> list[Album]:
+        from .album import Album
+        return [Album(r, self._doc, self._client) for r in self._doc.related(ArtistRel.ALBUMS, self._r)]
 
-    def image(self, size: int = 480) -> str:
-        if not self.picture:
-            return ""
-        return f"https://resources.tidal.com/images/{self.picture.replace('-', '/')}/{size}x{size}.jpg"
+    @property
+    def top_tracks(self) -> list[Track]:
+        from .track import Track
+        return [Track(r, self._doc, self._client) for r in self._doc.related(ArtistRel.TRACKS, self._r)]
 
-    def similar(self, limit: int = 10) -> list[Artist]:
-        """Similar artists via OpenAPI v2."""
-        r = self._session.client.oapi(f"artists/{self.id}/relationships/similarArtists")
-        ids = [d["id"] for d in r.get("data", [])[:limit]]
-        return [self._session.get_artist(int(aid)) for aid in ids]
+    @property
+    def similar_artists(self) -> list[Artist]:
+        return [Artist(r, self._doc, self._client) for r in self._doc.related(ArtistRel.SIMILAR_ARTISTS, self._r)]
 
-    def radio(self, limit: int = 100) -> list[Track]:
-        """Artist radio: tracks similar to this artist via v1 API.
-        Falls back to top tracks if radio is unavailable."""
-        from .track import Track as _Track
-        try:
-            raw = self._session.client.v1(f"artists/{self.id}/radio", {"limit": limit})
-            return [_Track(t, self._session) for t in raw.get("items", raw if isinstance(raw, list) else [])]
-        except Exception:
-            return self.get_top_tracks(limit=limit)
+    @property
+    def radio(self) -> list:
+        """Artist radio — returns playlist(s)."""
+        from .playlist import Playlist
+        return [Playlist(r, self._doc, self._client) for r in self._doc.related(ArtistRel.RADIO, self._r)]
+
+    @property
+    def videos(self) -> list[Video]:
+        from .video import Video
+        return [Video(r, self._doc, self._client) for r in self._doc.related(ArtistRel.VIDEOS, self._r)]
+
+    @property
+    def profile_url(self) -> str:
+        return self._r.artwork_url(ArtistRel.PROFILE_ART, self._doc)
+
+    def profile(self, size: int = 320) -> str:
+        return self._r.artwork_url(ArtistRel.PROFILE_ART, self._doc, size)
+
+    @property
+    def biography(self) -> str:
+        bios = self._doc.related(ArtistRel.BIOGRAPHY, self._r)
+        return bios[0].attributes.get("text", "") if bios else ""
+
+    @property
+    def roles(self) -> list[Resource]:
+        return self._doc.related(ArtistRel.ROLES, self._r)
