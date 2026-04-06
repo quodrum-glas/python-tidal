@@ -67,38 +67,27 @@ class UserCollection:
         sort: str | None = None,
     ) -> tuple[list[Resource], Document]:
         """Get all items from user collection, auto-paginating."""
+        from functools import partial
+        from ..utils import paginated_fetch
+
+        params = _params(
+            countryCode=country_code or self._client.country_code,
+            locale=locale,
+            **{"page[cursor]": page_cursor},
+            sort=sort,
+            include="items",
+        )
+        path = f"{self._base_path}/{user_id}/relationships/items"
         all_items: list[Resource] = []
         first_doc: Document | None = None
-        cursor = page_cursor
 
-        while True:
-            params = _params(
-                countryCode=country_code or self._client.country_code,
-                locale=locale,
-                **{"page[cursor]": cursor},
-                sort=sort,
-                include="items",
-            )
-            raw = self._client.oapi(
-                f"{self._base_path}/{user_id}/relationships/items", params
-            )
+        for raw in paginated_fetch(partial(self._client.oapi, path), params):
             doc = Document(raw)
             if first_doc is None:
                 first_doc = doc
             else:
                 first_doc.merge(doc)
             all_items.extend(_primary_list(doc))
-
-            # Follow next cursor
-            next_link = (raw.get("links") or {}).get("next")
-            if not next_link:
-                break
-            # Extract cursor from next link URL
-            from urllib.parse import parse_qs, urlparse
-            parsed = urlparse(next_link)
-            cursor = parse_qs(parsed.query).get("page[cursor]", [None])[0]
-            if not cursor:
-                break
 
         return all_items, first_doc or Document({"data": []})
 

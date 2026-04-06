@@ -51,6 +51,29 @@ def _dispatch_resource(resource: Resource, doc: Document, client: Client) -> Mod
     return wrap(resource, doc, client)
 
 
+def _fetch_relationship(
+    client: Client,
+    path: str,
+    params: dict | None = None,
+) -> tuple[list[Resource], Document]:
+    """Fetch all pages of a relationship endpoint, return merged resources+doc."""
+    from functools import partial
+    from ..utils import paginated_fetch
+
+    all_items: list[Resource] = []
+    merged_doc: Document | None = None
+
+    for raw in paginated_fetch(partial(client.oapi, path), params):
+        doc = Document(raw)
+        if merged_doc is None:
+            merged_doc = doc
+        else:
+            merged_doc.merge(doc)
+        all_items.extend(_as_list(doc))
+
+    return all_items, merged_doc or Document({"data": []})
+
+
 # -- Collection fetchers (multiple resources) ----------------------------
 
 
@@ -247,21 +270,15 @@ def get_artist_tracks(
     *,
     country_code: str | None = None,
     collapse_by: str = "FINGERPRINT",
-    page_cursor: str | None = None,
 ) -> tuple[list[Track], Document]:
-    """Fetch an artist's tracks via the relationship endpoint.
-
-    The ``collapseBy`` parameter is required by the API (FINGERPRINT or NONE).
-    Returns tracks with artists resolved via a batch follow-up call.
-    """
+    """Fetch all artist tracks via the relationship endpoint (paginated)."""
     params = _params(
         collapseBy=collapse_by,
         countryCode=country_code,
         include="tracks",
-        **{"page[cursor]": page_cursor},
     )
-    doc = Document(client.oapi(f"artists/{artist_id}/relationships/tracks", params))
-    tracks = [Track(r, doc, client) for r in doc.of_type("tracks")]
+    items, doc = _fetch_relationship(client, f"artists/{artist_id}/relationships/tracks", params)
+    tracks = [Track(r, doc, client) for r in items]
     if tracks:
         tracks = _hydrate_tracks(client, tracks, country_code=country_code)
     return tracks, doc
@@ -273,42 +290,64 @@ def _hydrate_tracks(
     *,
     country_code: str | None = None,
 ) -> list[Track]:
-    """Re-fetch tracks in batch with artists+albums+coverArt sideloaded.
-
-    Returns new Track instances with full relationship data.
-    """
-    from ..utils import chunked_fetch
-
+    """Re-fetch tracks with artists+albums+coverArt. Returns new Track instances."""
     ids = [t.id for t in tracks]
     if not ids:
         return tracks
 
-    all_hydrated: list[Track] = []
-    merged_doc: Document | None = None
+    doc = _fetch_and_merge(client, ids, country_code)
+    return _tracks_from_doc(doc, ids, client)
 
-    for hydrated, doc in chunked_fetch(
+
+def _fetch_and_merge(client: Client, track_ids: list[str], country_code: str | None) -> Document:
+    """Fetch tracks+artists+albums+coverArt into one merged Document."""
+    doc = _fetch_tracks_doc(client, track_ids, country_code)
+    _fetch_album_covers(client, doc, country_code)
+    return doc
+
+
+def _fetch_tracks_doc(client: Client, track_ids: list[str], country_code: str | None) -> Document:
+    """Fetch tracks with artists+albums into one merged Document."""
+    from ..utils import chunked_fetch
+
+    doc: Document | None = None
+    for _, chunk_doc in chunked_fetch(
         lambda chunk: get_tracks(
             client, track_ids=chunk, country_code=country_code,
             include=(TrackInclude.ARTISTS, TrackInclude.ALBUMS)),
-        ids,
+        track_ids,
     ):
-        all_hydrated.extend(hydrated)
-        if merged_doc is None:
-            merged_doc = doc
-        else:
-            merged_doc.merge(doc)
+        doc = chunk_doc if doc is None else (doc.merge(chunk_doc) or doc)
+    return doc or Document({"data": []})
 
-    album_ids = list({t.album.id for t in all_hydrated if t.album})
-    for _, doc in chunked_fetch(
+
+def _fetch_album_covers(client: Client, doc: Document, country_code: str | None) -> None:
+    """Fetch coverArt for all albums in *doc*, merging in place."""
+    from ..utils import chunked_fetch
+
+    album_ids = list({
+        r.id for r in doc.resources.values()
+        if (r.type.value if hasattr(r.type, 'value') else r.type) == "albums"
+    })
+    for _, chunk_doc in chunked_fetch(
         lambda chunk: get_albums(
             client, album_ids=chunk, country_code=country_code,
             include=(AlbumInclude.COVER_ART,)),
         album_ids,
     ):
-        merged_doc.merge(doc)
+        doc.merge(chunk_doc)
 
-    by_id = {t.id: t for t in all_hydrated}
-    return [by_id.get(tid, orig) for tid, orig in zip(ids, tracks)]
+
+def _tracks_from_doc(doc: Document, track_ids: list[str], client: Client) -> list[Track]:
+    """Build Track objects from a Document, preserving order of track_ids."""
+    from ..types import ResourceType
+    result = []
+    for tid in track_ids:
+        r = doc.resources.get((ResourceType.TRACKS, str(tid))) or \
+            doc.resources.get(("tracks", str(tid)))
+        if r:
+            result.append(Track(r, doc, client))
+    return result
 
 
 def get_playlist(
@@ -319,17 +358,32 @@ def get_playlist(
         PlaylistInclude.COVER_ART,
     ),
 ) -> tuple[Playlist, Document]:
-    """Fetch a single playlist by id.
-
-    Note: playlist tracks will have title/id but not their own artists.
-    Use :func:`get_tracks` with ``filter[id]`` + ``include=artists`` to
-    hydrate tracks, or rely on mopidy-tidal's lookup to do it lazily.
-    """
+    """Fetch a single playlist by id with all items paginated."""
+    # Fetch playlist metadata + coverArt (first page of items comes free)
     doc = Document(client.oapi(
         f"playlists/{playlist_id}",
         {"include": _inc(*include)} if include else None,
     ))
-    return Playlist(doc.primary, doc, client), doc
+    playlist = Playlist(doc.primary, doc, client)
+
+    # If items requested, paginate via relationship to get ALL items
+    if PlaylistInclude.ITEMS in include:
+        items, items_doc = _fetch_relationship(
+            client,
+            f"playlists/{playlist_id}/relationships/items",
+            {"include": "items"},
+        )
+        doc.merge(items_doc)
+        if items:
+            from enum import Enum
+            playlist._r.relationships["items"] = {
+                "data": [
+                    {"type": r.type.value if isinstance(r.type, Enum) else r.type, "id": r.id}
+                    for r in items
+                ]
+            }
+
+    return playlist, doc
 
 
 def get_video(
@@ -416,17 +470,15 @@ def search_tracks(
     *,
     country_code: str | None = None,
     explicit_filter: str | None = None,
-    page_cursor: str | None = None,
 ) -> tuple[list[Track], Document]:
-    """Search tracks with pagination via the relationship endpoint."""
+    """Search tracks with full pagination."""
     params = _params(
         countryCode=country_code,
         explicitFilter=explicit_filter,
-        **{"page[cursor]": page_cursor},
         include="tracks",
     )
-    doc = Document(client.oapi(f"searchResults/{query}/relationships/tracks", params))
-    return [Track(r, doc, client) for r in doc.of_type("tracks")], doc
+    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/tracks", params)
+    return [Track(r, doc, client) for r in items], doc
 
 
 def search_albums(
@@ -435,17 +487,15 @@ def search_albums(
     *,
     country_code: str | None = None,
     explicit_filter: str | None = None,
-    page_cursor: str | None = None,
 ) -> tuple[list[Album], Document]:
-    """Search albums with pagination via the relationship endpoint."""
+    """Search albums with full pagination."""
     params = _params(
         countryCode=country_code,
         explicitFilter=explicit_filter,
-        **{"page[cursor]": page_cursor},
         include="albums",
     )
-    doc = Document(client.oapi(f"searchResults/{query}/relationships/albums", params))
-    return [Album(r, doc, client) for r in doc.of_type("albums")], doc
+    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/albums", params)
+    return [Album(r, doc, client) for r in items], doc
 
 
 def search_artists(
@@ -454,17 +504,15 @@ def search_artists(
     *,
     country_code: str | None = None,
     explicit_filter: str | None = None,
-    page_cursor: str | None = None,
 ) -> tuple[list[Artist], Document]:
-    """Search artists with pagination via the relationship endpoint."""
+    """Search artists with full pagination."""
     params = _params(
         countryCode=country_code,
         explicitFilter=explicit_filter,
-        **{"page[cursor]": page_cursor},
         include="artists",
     )
-    doc = Document(client.oapi(f"searchResults/{query}/relationships/artists", params))
-    return [Artist(r, doc, client) for r in doc.of_type("artists")], doc
+    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/artists", params)
+    return [Artist(r, doc, client) for r in items], doc
 
 
 def search_playlists(
@@ -473,19 +521,15 @@ def search_playlists(
     *,
     country_code: str | None = None,
     explicit_filter: str | None = None,
-    page_cursor: str | None = None,
 ) -> tuple[list[Playlist], Document]:
-    """Search playlists with pagination via the relationship endpoint."""
+    """Search playlists with full pagination."""
     params = _params(
         countryCode=country_code,
         explicitFilter=explicit_filter,
-        **{"page[cursor]": page_cursor},
         include="playlists",
     )
-    doc = Document(
-        client.oapi(f"searchResults/{query}/relationships/playlists", params)
-    )
-    return [Playlist(r, doc, client) for r in doc.of_type("playlists")], doc
+    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/playlists", params)
+    return [Playlist(r, doc, client) for r in items], doc
 
 
 def search_videos(
@@ -494,17 +538,15 @@ def search_videos(
     *,
     country_code: str | None = None,
     explicit_filter: str | None = None,
-    page_cursor: str | None = None,
 ) -> tuple[list[Video], Document]:
-    """Search videos with pagination via the relationship endpoint."""
+    """Search videos with full pagination."""
     params = _params(
         countryCode=country_code,
         explicitFilter=explicit_filter,
-        **{"page[cursor]": page_cursor},
         include="videos",
     )
-    doc = Document(client.oapi(f"searchResults/{query}/relationships/videos", params))
-    return [Video(r, doc, client) for r in doc.of_type("videos")], doc
+    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/videos", params)
+    return [Video(r, doc, client) for r in items], doc
 
 
 def search_top_hits(
@@ -513,19 +555,15 @@ def search_top_hits(
     *,
     country_code: str | None = None,
     explicit_filter: str | None = None,
-    page_cursor: str | None = None,
 ) -> tuple[list[Model], Document]:
-    """Search top hits (mixed types) with pagination via the relationship endpoint."""
+    """Search top hits with full pagination."""
     params = _params(
         countryCode=country_code,
         explicitFilter=explicit_filter,
-        **{"page[cursor]": page_cursor},
         include="topHits",
     )
-    doc = Document(
-        client.oapi(f"searchResults/{query}/relationships/topHits", params)
-    )
-    return [_dispatch_resource(r, doc, client) for r in _as_list(doc)], doc
+    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/topHits", params)
+    return [_dispatch_resource(r, doc, client) for r in items], doc
 
 
 # -- Search suggestions ---------------------------------------------------

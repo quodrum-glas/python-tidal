@@ -44,10 +44,38 @@ def chunked_fetch(
 
     Usage::
 
-        from functools import partial
-        fetch = partial(get_tracks, client, include=(...), country_code=cc)
         for tracks, doc in chunked_fetch(fetch, track_ids):
             ...
     """
     for i in range(0, len(ids), chunk_size):
         yield fn(ids[i:i + chunk_size])
+
+
+def paginated_fetch(
+    fn: Callable[..., dict],
+    params: dict | None = None,
+) -> Iterator[dict]:
+    """Follow JSON:API cursor pagination, yielding each raw response.
+
+    *fn* is called with *params* (plus ``page[cursor]`` on subsequent pages).
+    Stops when there is no ``links.next``.
+
+    Usage::
+
+        for raw in paginated_fetch(client.oapi, {"include": "items"}):
+            doc = Document(raw)
+            ...
+    """
+    from urllib.parse import parse_qs, urlparse
+
+    p = dict(params or {})
+    while True:
+        raw = fn(p)
+        yield raw
+        next_link = (raw.get("links") or {}).get("next")
+        if not next_link:
+            break
+        cursor = parse_qs(urlparse(next_link).query).get("page[cursor]", [None])[0]
+        if not cursor:
+            break
+        p["page[cursor]"] = cursor

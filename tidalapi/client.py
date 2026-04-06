@@ -141,7 +141,7 @@ class Client:
         return resp.json() if resp.content else None
 
     def oapi(self, path: str, params: dict | None = None, method: str = "GET", **kw) -> Any:
-        # logging.getLogger("mopidy_tidal.oapi").warning("%s %s %s", method, path, params)
+        log.debug("%s %s %s", method, path, params)
         resp = self.request(method, f"{BASE_OPENAPI}{path}", params=params, **kw)
         return resp.json() if resp.content else None
 
