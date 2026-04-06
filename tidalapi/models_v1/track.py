@@ -66,10 +66,11 @@ class Track(_Model):
             if inc.get("type") == "credits"
         ]
 
-    def similar_tracks(self, limit: int = 10) -> list[Track]:
+    @property
+    def similar_tracks(self) -> list[Track]:
         """Similar tracks via OpenAPI v2 (returns IDs, resolved via v1)."""
         r = self._session.client.oapi(f"tracks/{self.id}/relationships/similarTracks")
-        ids = [d["id"] for d in r.get("data", [])[:limit]]
+        ids = [d["id"] for d in r.get("data", [])]
         return [self._session.get_track(int(tid)) for tid in ids]
 
     # -- Compatibility methods for oapi interface --
