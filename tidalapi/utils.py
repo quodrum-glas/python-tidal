@@ -1,6 +1,9 @@
-"""Lazy descriptor: compute once on first access, cache on instance."""
+"""Utilities: lazy descriptor, chunked fetch."""
 
 from __future__ import annotations
+
+from collections.abc import Callable, Iterator
+from typing import Any
 
 
 class lazy:
@@ -30,3 +33,21 @@ class lazy:
         val = self._func(obj)
         setattr(obj, self._attr, val)
         return val
+
+
+def chunked_fetch(
+    fn: Callable[[list], Any],
+    ids: list,
+    chunk_size: int = 20,
+) -> Iterator:
+    """Call *fn* with chunks of *ids*, yielding each result.
+
+    Usage::
+
+        from functools import partial
+        fetch = partial(get_tracks, client, include=(...), country_code=cc)
+        for tracks, doc in chunked_fetch(fetch, track_ids):
+            ...
+    """
+    for i in range(0, len(ids), chunk_size):
+        yield fn(ids[i:i + chunk_size])

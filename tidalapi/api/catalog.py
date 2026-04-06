@@ -277,26 +277,37 @@ def _hydrate_tracks(
 
     Returns new Track instances with full relationship data.
     """
+    from ..utils import chunked_fetch
+
     ids = [t.id for t in tracks]
     if not ids:
         return tracks
-    hydrated, hydrated_doc = get_tracks(
-        client,
-        track_ids=ids,
-        country_code=country_code,
-        include=(TrackInclude.ARTISTS, TrackInclude.ALBUMS),
-    )
-    # Batch-fetch unique albums with coverArt
-    album_ids = list({t.album.id for t in hydrated if t.album})
-    if album_ids:
-        _, albums_doc = get_albums(
-            client,
-            album_ids=album_ids,
-            country_code=country_code,
-            include=(AlbumInclude.COVER_ART,),
-        )
-        hydrated_doc.merge(albums_doc)
-    by_id = {t.id: t for t in hydrated}
+
+    all_hydrated: list[Track] = []
+    merged_doc: Document | None = None
+
+    for hydrated, doc in chunked_fetch(
+        lambda chunk: get_tracks(
+            client, track_ids=chunk, country_code=country_code,
+            include=(TrackInclude.ARTISTS, TrackInclude.ALBUMS)),
+        ids,
+    ):
+        all_hydrated.extend(hydrated)
+        if merged_doc is None:
+            merged_doc = doc
+        else:
+            merged_doc.merge(doc)
+
+    album_ids = list({t.album.id for t in all_hydrated if t.album})
+    for _, doc in chunked_fetch(
+        lambda chunk: get_albums(
+            client, album_ids=chunk, country_code=country_code,
+            include=(AlbumInclude.COVER_ART,)),
+        album_ids,
+    ):
+        merged_doc.merge(doc)
+
+    by_id = {t.id: t for t in all_hydrated}
     return [by_id.get(tid, orig) for tid, orig in zip(ids, tracks)]
 
 
