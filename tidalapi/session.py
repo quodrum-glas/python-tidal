@@ -467,11 +467,11 @@ class Session:
                                include=(ArtistInclude.ALBUMS,))
         return artist.albums
 
-    def get_artist_tracks(self, artist_id: int) -> list[Track]:
+    def get_artist_tracks(self, artist_id: int, limit = 20) -> list[Track]:
         """Get artist tracks via relationship endpoint (already hydrated)."""
         from .api.catalog import get_artist_tracks
         tracks, _ = get_artist_tracks(self._ensure_client(), artist_id,
-                                      country_code=self.country_code)
+                                      country_code=self.country_code, limit=limit)
         return tracks
 
     def get_playlist_tracks(self, uuid: str, limit: int = 0, offset: int = 0) -> list[Track]:

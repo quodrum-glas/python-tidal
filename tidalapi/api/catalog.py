@@ -55,8 +55,13 @@ def _fetch_relationship(
     client: Client,
     path: str,
     params: dict | None = None,
+    *,
+    limit: int = 0,
 ) -> tuple[list[Resource], Document]:
-    """Fetch all pages of a relationship endpoint, return merged resources+doc."""
+    """Fetch pages of a relationship endpoint, return merged resources+doc.
+
+    If *limit* > 0, stop after collecting that many items.
+    """
     from functools import partial
     from ..utils import paginated_fetch
 
@@ -70,6 +75,9 @@ def _fetch_relationship(
         else:
             merged_doc.merge(doc)
         all_items.extend(_as_list(doc))
+        if limit and len(all_items) >= limit:
+            all_items = all_items[:limit]
+            break
 
     return all_items, merged_doc or Document({"data": []})
 
@@ -270,14 +278,17 @@ def get_artist_tracks(
     *,
     country_code: str | None = None,
     collapse_by: str = "FINGERPRINT",
+    limit: int = 20,
 ) -> tuple[list[Track], Document]:
-    """Fetch all artist tracks via the relationship endpoint (paginated)."""
+    """Fetch artist tracks via the relationship endpoint (paginated)."""
     params = _params(
         collapseBy=collapse_by,
         countryCode=country_code,
         include="tracks",
     )
-    items, doc = _fetch_relationship(client, f"artists/{artist_id}/relationships/tracks", params)
+    items, doc = _fetch_relationship(
+        client, f"artists/{artist_id}/relationships/tracks", params, limit=limit,
+    )
     tracks = [Track(r, doc, client) for r in items]
     if tracks:
         tracks = _hydrate_tracks(client, tracks, country_code=country_code)
