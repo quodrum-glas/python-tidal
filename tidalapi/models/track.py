@@ -94,7 +94,11 @@ class Track(Model):
 
     @property
     def similar_tracks(self) -> list[Track]:
-        return [Track(r, self._doc, self._client) for r in self._doc.related(TrackRel.SIMILAR_TRACKS, self._r)]
+        result = [Track(r, self._doc, self._client) for r in self._doc.related(TrackRel.SIMILAR_TRACKS, self._r)]
+        if not result:
+            from ..api.catalog import get_similar_tracks
+            result, _ = get_similar_tracks(self._client, self.id)
+        return result
 
     @property
     def credits(self) -> list[Resource]:
