@@ -306,15 +306,10 @@ def _hydrate_tracks(
     if not ids:
         return tracks
 
-    doc = _fetch_and_merge(client, ids, country_code)
+    doc = _fetch_tracks_doc(client, ids, country_code)
+    if client.fetch_album_covers:
+        _fetch_album_covers(client, doc, country_code)
     return _tracks_from_doc(doc, ids, client)
-
-
-def _fetch_and_merge(client: Client, track_ids: list[str], country_code: str | None) -> Document:
-    """Fetch tracks+artists+albums+coverArt into one merged Document."""
-    doc = _fetch_tracks_doc(client, track_ids, country_code)
-    _fetch_album_covers(client, doc, country_code)
-    return doc
 
 
 def _fetch_tracks_doc(client: Client, track_ids: list[str], country_code: str | None) -> Document:
@@ -408,6 +403,88 @@ def get_video(
         {"include": _inc(*include)} if include else None,
     ))
     return Video(doc.primary, doc, client), doc
+
+
+# -- Track relationships --------------------------------------------------
+
+
+def get_similar_tracks(
+    client: Client,
+    track_id: int | str,
+    *,
+    limit: int = 40,
+) -> tuple[list[Track], Document]:
+    """Fetch similar tracks for a track."""
+    items, doc = _fetch_relationship(
+        client,
+        f"tracks/{track_id}/relationships/similarTracks",
+        {"include": "similarTracks"},
+        limit=limit,
+    )
+    return [Track(r, doc, client) for r in items], doc
+
+
+# -- Playlist CRUD --------------------------------------------------------
+
+
+def create_playlist(
+    client: Client,
+    name: str,
+    description: str = "",
+    *,
+    country_code: str | None = None,
+) -> tuple[Playlist, Document]:
+    """Create a new playlist."""
+    payload = {
+        "data": {
+            "type": "playlists",
+            "attributes": {"name": name, "description": description},
+        }
+    }
+    raw = client.oapi("playlists", params=_params(countryCode=country_code),
+                      method="POST", json=payload)
+    doc = Document(raw)
+    return Playlist(doc.primary, doc, client), doc
+
+
+def add_tracks_to_playlist(
+    client: Client,
+    playlist_id: str,
+    track_ids: list[str],
+    *,
+    country_code: str | None = None,
+) -> None:
+    """Add tracks to a playlist."""
+    payload = {"data": [{"type": "tracks", "id": tid} for tid in track_ids]}
+    client.oapi(f"playlists/{playlist_id}/relationships/items",
+                params=_params(countryCode=country_code),
+                method="POST", json=payload)
+
+
+def remove_tracks_from_playlist(
+    client: Client,
+    playlist_id: str,
+    track_ids: list[str],
+) -> None:
+    """Remove tracks from a playlist. Fetches item metadata for required itemId."""
+    raw = client.oapi(f"playlists/{playlist_id}/relationships/items")
+    remove_set = set(track_ids)
+    data = []
+    for item in raw.get("data", []):
+        if item.get("id") in remove_set and item.get("type") in ("tracks", "videos"):
+            data.append({
+                "type": item["type"],
+                "id": item["id"],
+                "meta": {"itemId": item.get("meta", {}).get("itemId", item["id"])},
+            })
+    if data:
+        client.oapi(f"playlists/{playlist_id}/relationships/items",
+                    method="DELETE", json={"data": data})
+
+
+def delete_playlist(client: Client, playlist_id: str) -> None:
+    """Delete a playlist."""
+    client.oapi(f"playlists/{playlist_id}", method="DELETE")
 
 
 # -- Search ---------------------------------------------------------------

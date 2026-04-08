@@ -96,7 +96,8 @@ class Session:
         client_id: str = "",
         client_secret: str = "",
         config: _Config | None = None,
-        quality: str = "HIGH",
+        quality: str = Quality.LOSSLESS,
+        fetch_album_covers: bool = False,
     ):
         self.config = config or _Config(quality=quality)
         self.client_id = client_id
@@ -119,7 +120,7 @@ class Session:
 
         self.auth = auth
         self.is_pkce = auth.is_pkce if auth else False
-        self.client = Client(auth) if auth else None
+        self.client = Client(auth, fetch_album_covers=fetch_album_covers) if auth else None
 
     def _ensure_client(self) -> Client:
         if self.client is None:
@@ -490,54 +491,21 @@ class Session:
         return artists[0] if artists else None
 
     def create_playlist(self, name: str, description: str = "") -> Playlist:
-        """Create a new playlist via oapi."""
-        c = self._ensure_client()
-        payload = {
-            "data": {
-                "type": "playlists",
-                "attributes": {"name": name, "description": description},
-            }
-        }
-        from .jsonapi import Document
-        raw = c.oapi("playlists", params={"countryCode": c.country_code},
-                     method="POST", json=payload)
-        doc = Document(raw)
-        return Playlist(doc.primary, doc, c)
+        from .api.catalog import create_playlist
+        p, _ = create_playlist(self._ensure_client(), name, description)
+        return p
 
     def add_tracks_to_playlist(self, playlist_id: str, track_ids: list[str]) -> None:
-        """Add tracks to a playlist via oapi."""
-        c = self._ensure_client()
-        payload = {"data": [{"type": "tracks", "id": tid} for tid in track_ids]}
-        c.oapi(f"playlists/{playlist_id}/relationships/items",
-               params={"countryCode": c.country_code},
-               method="POST", json=payload)
+        from .api.catalog import add_tracks_to_playlist
+        add_tracks_to_playlist(self._ensure_client(), playlist_id, track_ids)
 
     def remove_tracks_from_playlist(self, playlist_id: str, track_ids: list[str]) -> None:
-        """Remove tracks from a playlist via oapi.
-
-        The oapi DELETE requires meta.itemId for each item. We fetch the
-        playlist items to resolve track IDs to their playlist-specific itemIds.
-        """
-        c = self._ensure_client()
-        # Fetch playlist items to get itemId for each track
-        raw = c.oapi(f"playlists/{playlist_id}/relationships/items")
-        remove_set = set(track_ids)
-        data = []
-        for item in raw.get("data", []):
-            if item.get("id") in remove_set and item.get("type") in ("tracks", "videos"):
-                data.append({
-                    "type": item["type"],
-                    "id": item["id"],
-                    "meta": {"itemId": item.get("meta", {}).get("itemId", item["id"])},
-                })
-        if data:
-            c.oapi(f"playlists/{playlist_id}/relationships/items",
-                   method="DELETE", json={"data": data})
+        from .api.catalog import remove_tracks_from_playlist
+        remove_tracks_from_playlist(self._ensure_client(), playlist_id, track_ids)
 
     def delete_playlist(self, playlist_id: str) -> None:
-        """Delete a playlist via oapi."""
-        c = self._ensure_client()
-        c.oapi(f"playlists/{playlist_id}", method="DELETE")
+        from .api.catalog import delete_playlist
+        delete_playlist(self._ensure_client(), playlist_id)
 
     # ── v1/v2 only (no oapi equivalent or oapi insufficient) ────────────
 
@@ -632,12 +600,12 @@ class Session:
     def moods(self) -> list[PageLink]:
         """Get mood links (navigable — call .get() on each)."""
         pg = self.get_page("moods")
-        links = []
-        for cat in pg.categories:
-            for item in cat.items:
-                if isinstance(item, PageLink):
-                    links.append(item)
-        return links
+        return [
+            item
+            for cat in pg.categories
+            for item in cat.items
+            if isinstance(item, PageLink)
+        ]
 
     def mixes(self) -> Page:
         return self.get_page("my_collection_my_mixes")

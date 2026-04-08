@@ -52,11 +52,12 @@ class Client:
     on first use — no need to pass them in.
     """
 
-    def __init__(self, auth: Auth, min_request_gap: float = 0.05):
+    def __init__(self, auth: Auth, min_request_gap: float = 0.05, fetch_album_covers: bool = False):
         self.auth = auth
         self._gap = min_request_gap
         self._http = _req.Session()
         self._last_ts = 0.0
+        self.fetch_album_covers = fetch_album_covers
 
     # -- lazy session info ------------------------------------------------
 
