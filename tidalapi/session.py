@@ -34,7 +34,7 @@ from .models_v1 import (
 )
 from .models_v1 import Playlist as PlaylistV1
 from .models import Album, Artist, Playlist, Track, Video
-from .api.stream import Quality, StreamInfo, get_stream, get_stream_oapi, get_video_url
+from .api.stream import Quality, StreamInfo, get_stream_v1, get_stream_oapi, get_decryption_keys, get_video_url
 from datetime import datetime, timedelta
 from .api.user import Favorites, PlaylistFolders
 from .utils import lazy
@@ -98,11 +98,13 @@ class Session:
         config: _Config | None = None,
         quality: str = Quality.LOSSLESS,
         fetch_album_covers: bool = False,
+        widevine_cdm_path: str | Path | None = None,
     ):
         self.config = config or _Config(quality=quality)
         self.client_id = client_id
         self.client_secret = client_secret
         self.is_pkce: bool = not client_secret
+        self.widevine_cdm_path = widevine_cdm_path
 
         # Deferred mode: no auth yet
         if auth is None and token_file is None:
@@ -536,13 +538,15 @@ class Session:
 
     # ── stream ───────────────────────────────────────────────────────────
 
-    def get_stream(self, track_id: int, quality: Quality | str = Quality.HIGH) -> StreamInfo:
-        return get_stream(self._ensure_client(), track_id, quality)
+    def get_stream(self, track_id: int, quality: Quality | str = Quality.LOSSLESS) -> StreamInfo:
+        if self.widevine_cdm_path:
+            return get_stream_oapi(self._ensure_client(), track_id, quality)
+        return get_stream_v1(self._ensure_client(), track_id, quality)
 
-    def get_stream_oapi(self, track_id: int, quality: Quality | str = Quality.HIGH) -> StreamInfo:
-        return get_stream_oapi(self._ensure_client(), track_id, quality)
+    def get_decryption_keys(self, stream: StreamInfo) -> list[tuple[str, str]]:
+        return get_decryption_keys(self._ensure_client(), stream, self.widevine_cdm_path)
 
-    def get_video_url(self, video_id: int, quality: str = "HIGH") -> str:
+    def get_video_url(self, video_id: int, quality: str = Quality.HIGH) -> str:
         return get_video_url(self._ensure_client(), video_id, quality)
 
     # ── pages (v1 only — no oapi equivalent) ─────────────────────────────
