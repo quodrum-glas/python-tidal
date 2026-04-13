@@ -7,9 +7,10 @@ name = "tidalapi"
 version = "0.1.0"
 description = "Clean Python client for the TIDAL music streaming API"
 requires-python = ">=3.10"
-dependencies = ["requests>=2.31"]
+dependencies = ["requests>=2.31", "tenacity>=8.0"]
 
 [project.optional-dependencies]
+drm = ["pywidevine>=1.8"]
 dev = ["pytest", "pytest-mock", "ruff"]
 
 [tool.pytest.ini_options]
