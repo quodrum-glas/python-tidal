@@ -558,6 +558,7 @@ def search_tracks(
     *,
     country_code: str | None = None,
     explicit_filter: str | None = None,
+    limit: int = 0,
 ) -> tuple[list[Track], Document]:
     """Search tracks with full pagination."""
     params = _params(
@@ -565,7 +566,7 @@ def search_tracks(
         explicitFilter=explicit_filter,
         include="tracks",
     )
-    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/tracks", params)
+    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/tracks", params, limit=limit)
     return [Track(r, doc, client) for r in items], doc
 
 
@@ -575,6 +576,7 @@ def search_albums(
     *,
     country_code: str | None = None,
     explicit_filter: str | None = None,
+    limit: int = 0,
 ) -> tuple[list[Album], Document]:
     """Search albums with full pagination."""
     params = _params(
@@ -582,7 +584,7 @@ def search_albums(
         explicitFilter=explicit_filter,
         include="albums",
     )
-    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/albums", params)
+    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/albums", params, limit=limit)
     return [Album(r, doc, client) for r in items], doc
 
 
@@ -592,6 +594,7 @@ def search_artists(
     *,
     country_code: str | None = None,
     explicit_filter: str | None = None,
+    limit: int = 0,
 ) -> tuple[list[Artist], Document]:
     """Search artists with full pagination."""
     params = _params(
@@ -599,7 +602,7 @@ def search_artists(
         explicitFilter=explicit_filter,
         include="artists",
     )
-    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/artists", params)
+    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/artists", params, limit=limit)
     return [Artist(r, doc, client) for r in items], doc
 
 
@@ -609,6 +612,7 @@ def search_playlists(
     *,
     country_code: str | None = None,
     explicit_filter: str | None = None,
+    limit: int = 0,
 ) -> tuple[list[Playlist], Document]:
     """Search playlists with full pagination."""
     params = _params(
@@ -616,7 +620,7 @@ def search_playlists(
         explicitFilter=explicit_filter,
         include="playlists",
     )
-    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/playlists", params)
+    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/playlists", params, limit=limit)
     return [Playlist(r, doc, client) for r in items], doc
 
 
@@ -626,6 +630,7 @@ def search_videos(
     *,
     country_code: str | None = None,
     explicit_filter: str | None = None,
+    limit: int = 0,
 ) -> tuple[list[Video], Document]:
     """Search videos with full pagination."""
     params = _params(
@@ -633,7 +638,7 @@ def search_videos(
         explicitFilter=explicit_filter,
         include="videos",
     )
-    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/videos", params)
+    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/videos", params, limit=limit)
     return [Video(r, doc, client) for r in items], doc
 
 
@@ -643,6 +648,7 @@ def search_top_hits(
     *,
     country_code: str | None = None,
     explicit_filter: str | None = None,
+    limit: int = 0,
 ) -> tuple[list[Model], Document]:
     """Search top hits with full pagination."""
     params = _params(
@@ -650,7 +656,7 @@ def search_top_hits(
         explicitFilter=explicit_filter,
         include="topHits",
     )
-    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/topHits", params)
+    items, doc = _fetch_relationship(client, f"searchResults/{query}/relationships/topHits", params, limit=limit)
     return [_dispatch_resource(r, doc, client) for r in items], doc
 
 
