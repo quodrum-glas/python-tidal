@@ -9,14 +9,16 @@ from typing import Any
 
 import requests as _req
 from tenacity import (
+    before_sleep_log,
     retry,
     retry_if_exception_type,
     stop_after_attempt,
-    wait_exponential,
+    wait_random_exponential,
 )
 
 from .auth import Auth
 from .exceptions import NotFoundError, RateLimitError, TidalError
+from .http import TTLRequestsSessionManager
 from .utils import lazy
 
 log = logging.getLogger(__name__)
@@ -34,8 +36,10 @@ def _throttle(fn):
     @wraps(fn)
     def wrapper(self, *args, **kwargs):
         elapsed = time.monotonic() - self._last_ts
-        if elapsed < self._gap:
-            time.sleep(self._gap - elapsed)
+        wait = self._gap - elapsed
+        if wait > 0:
+            log.warning("Throttle: waiting %.3fs before request", wait)
+            time.sleep(wait)
         self._last_ts = time.monotonic()
         return fn(self, *args, **kwargs)
     return wrapper
@@ -43,6 +47,16 @@ def _throttle(fn):
 
 class _Retryable(RateLimitError):
     """Raised internally to trigger tenacity retry on transient errors."""
+
+    def __init__(self, msg, *, status, retry_after=None):
+        super().__init__(msg, status=status)
+        self.retry_after = retry_after
+
+
+def _retry_after(retry_state):
+    """Use Retry-After header when available, otherwise exponential backoff."""
+    ra = getattr(retry_state.outcome.exception(), "retry_after", 0) or 0
+    return ra if ra > 0 else wait_random_exponential(multiplier=0.5, max=5)(retry_state)
 
 
 class Client:
@@ -52,23 +66,23 @@ class Client:
     on first use — no need to pass them in.
     """
 
-    def __init__(self, auth: Auth, min_request_gap: float = 0.05, fetch_album_covers: bool = False):
+    def __init__(self, auth: Auth, http_timeout: tuple[float, float],
+                 min_request_gap: float = 0.05):
         self.auth = auth
+        self.http = TTLRequestsSessionManager(
+            timeout=http_timeout,
+            pool_connections=4,
+            pool_maxsize=4,
+        )
         self._gap = min_request_gap
-        self._http = _req.Session()
         self._last_ts = 0.0
-        self.fetch_album_covers = fetch_album_covers
 
     # -- lazy session info ------------------------------------------------
 
     @lazy
     def _session_info(self) -> dict:
         """GET /v1/sessions once, cache the whole response."""
-        self.auth.ensure_valid()
-        resp = self._http.get(f"{BASE_V1}sessions", headers=self.auth.header)
-        if not resp.ok:
-            raise TidalError(f"GET sessions failed: {resp.text[:300]}", status=resp.status_code)
-        return resp.json()
+        return self.get(f"{BASE_V1}sessions")
 
     @lazy
     def country_code(self) -> str:
@@ -90,23 +104,23 @@ class Client:
     # -- raw request with retry -------------------------------------------
 
     @retry(
-        retry=retry_if_exception_type((_Retryable, _req.ConnectionError, _req.Timeout)),
-        stop=stop_after_attempt(4),
-        wait=wait_exponential(multiplier=1, max=30),
+        retry=retry_if_exception_type(_Retryable),
+        stop=stop_after_attempt(3),
+        wait=_retry_after,
+        before_sleep=before_sleep_log(log, logging.WARNING),
         reraise=True,
     )
     @_throttle
     def request(self, method: str, url: str, **kw) -> _req.Response:
         self.auth.ensure_valid()
         kw.setdefault("headers", {}).update(self.auth.header)
-        resp = self._http.request(method, url, **kw)
+        resp = self.http.request(method, url, **kw)
 
         if resp.status_code == 404:
             raise NotFoundError(resp.text[:300], status=404)
         if resp.status_code in _RETRY_STATUSES:
-            if resp.status_code == 429 and "Retry-After" in resp.headers:
-                time.sleep(int(resp.headers["Retry-After"]))
-            raise _Retryable(f"HTTP {resp.status_code}", status=resp.status_code)
+            ra = int(resp.headers.get("Retry-After", "0"))
+            raise _Retryable(f"HTTP {resp.status_code}", status=resp.status_code, retry_after=ra)
         if not resp.ok:
             raise TidalError(resp.text[:500], status=resp.status_code)
         return resp

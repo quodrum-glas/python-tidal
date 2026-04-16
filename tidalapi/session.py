@@ -34,7 +34,7 @@ from .models_v1 import (
 )
 from .models_v1 import Playlist as PlaylistV1
 from .models import Album, Artist, Playlist, Track, Video
-from .api.stream import Quality, StreamInfo, get_stream_v1, get_stream_oapi, get_decryption_keys, get_video_url
+from .api.stream import Quality, StreamInfo, get_stream_v1, get_stream_oapi, get_decryption_keys, get_video_url, fetch_service_certificate
 from datetime import datetime, timedelta
 from .api.user import Favorites, PlaylistFolders
 from .utils import lazy
@@ -91,6 +91,7 @@ class Session:
 
     def __init__(
         self,
+        http_timeout: tuple[float, float],
         auth: Auth | None = None,
         token_file: str | Path | None = None,
         client_id: str = "",
@@ -105,11 +106,14 @@ class Session:
         self.client_secret = client_secret
         self.is_pkce: bool = not client_secret
         self.widevine_cdm_path = widevine_cdm_path
+        self.fetch_album_covers = fetch_album_covers
+        self.http_timeout = http_timeout
+        self._service_certs: dict[str, bytes] = {}
 
         # Deferred mode: no auth yet
         if auth is None and token_file is None:
             self.auth: Auth | None = None
-            self.client: Client | None = None
+            self._client: Client | None = None
             return
 
         # Direct mode: load auth and hydrate
@@ -122,16 +126,27 @@ class Session:
 
         self.auth = auth
         self.is_pkce = auth.is_pkce if auth else False
-        self.client = Client(auth, fetch_album_covers=fetch_album_covers) if auth else None
+        self._client = Client(auth, http_timeout=self.http_timeout) if auth else None
 
-    def _ensure_client(self) -> Client:
-        if self.client is None:
+    @property
+    def client(self) -> Client:
+        if self._client is None:
             raise RuntimeError("Session has no auth — load or complete login first")
-        return self.client
+        return self._client
+
+    @lazy
+    def cdm(self) -> Any:
+        """Widevine CDM, loaded once on first access."""
+        if not self.widevine_cdm_path:
+            return None
+        from pywidevine import Cdm, Device
+        cdm = Cdm.from_device(Device.load(Path(self.widevine_cdm_path)))
+        log.debug("Widevine CDM loaded")
+        return cdm
 
     def _hydrate(self) -> None:
         """Force-resolve lazy session info on the client."""
-        c = self._ensure_client()
+        c = self.client
         _ = c.country_code  # triggers GET sessions, caches all lazy props
         log.info("Session hydrated: user=%s country=%s", c.user_id, c.country_code)
 
@@ -146,7 +161,7 @@ class Session:
             self.auth = Auth.from_file(p, client_id=self.client_id, client_secret=self.client_secret)
             self.auth._path = p
             self.is_pkce = self.auth.is_pkce
-            self.client = Client(self.auth)
+            self._client = Client(self.auth, http_timeout=self.http_timeout)
             return True
         except Exception as e:
             log.info("Could not load session from %s: %s", path, e)
@@ -174,7 +189,7 @@ class Session:
         if not self.auth or not self.auth._code_verifier:
             raise AuthError("No PKCE flow in progress")
         self.auth.complete_pkce(redirect_url)
-        self.client = Client(self.auth)
+        self._client = Client(self.auth, http_timeout=self.http_timeout)
 
     def pkce_get_auth_token(self, redirect_url: str) -> dict:
         """Exchange the PKCE redirect URL for tokens. Returns the raw token dict.
@@ -207,7 +222,7 @@ class Session:
                 is_pkce=is_pkce_token,
             )
         self.is_pkce = is_pkce_token
-        self.client = Client(self.auth)
+        self._client = Client(self.auth, http_timeout=self.http_timeout)
         return True
 
     def login_oauth(self) -> tuple[LinkLogin, concurrent.futures.Future]:
@@ -232,7 +247,7 @@ class Session:
             time.sleep(link.interval)
             remaining -= link.interval
             if self.auth.check_device_login(link):
-                self.client = Client(self.auth)
+                self._client = Client(self.auth, http_timeout=self.http_timeout)
                 return
         raise TimeoutError("Device login timed out")
 
@@ -242,11 +257,11 @@ class Session:
         self.auth = auth_stub
         self.is_pkce = False
         auth_stub.poll_device_login(link, fn_print=fn_print)
-        self.client = Client(self.auth)
+        self._client = Client(self.auth, http_timeout=self.http_timeout)
 
     def check_login(self) -> bool:
         """True if the current token is valid against the API."""
-        if not self.auth or not self.auth.access_token or not self.client:
+        if not self.auth or not self.auth.access_token or not self._client:
             return False
         try:
             self.client.v1(f"users/{self.user_id}/subscription")
@@ -258,15 +273,15 @@ class Session:
 
     @property
     def user_id(self) -> int:
-        return self._ensure_client().user_id
+        return self.client.user_id
 
     @property
     def country_code(self) -> str:
-        return self._ensure_client().country_code
+        return self.client.country_code
 
     @property
     def session_id(self) -> str | None:
-        return self._ensure_client().session_id
+        return self.client.session_id
 
     # ── user / favorites / genre ─────────────────────────────────────────
 
@@ -276,11 +291,11 @@ class Session:
 
     @lazy
     def favorites(self) -> Favorites:
-        return Favorites(self._ensure_client(), self.user_id, self)
+        return Favorites(self.client, self.user_id, self)
 
     @lazy
     def playlist_folders(self) -> PlaylistFolders:
-        return PlaylistFolders(self._ensure_client(), self)
+        return PlaylistFolders(self.client, self)
 
     @property
     def genre(self) -> _GenreHelper:
@@ -290,32 +305,32 @@ class Session:
 
     def get_track(self, track_id: int) -> Track:
         from .api.catalog import get_track
-        t, _ = get_track(self._ensure_client(), track_id)
+        t, _ = get_track(self.client, track_id)
         return t
 
     def get_album(self, album_id: int) -> Album:
         from .api.catalog import get_album
-        a, _ = get_album(self._ensure_client(), album_id)
+        a, _ = get_album(self.client, album_id)
         return a
 
     def get_artist(self, artist_id: int) -> Artist:
         from .api.catalog import get_artist
-        a, _ = get_artist(self._ensure_client(), artist_id)
+        a, _ = get_artist(self.client, artist_id)
         return a
 
     def get_playlist(self, uuid: str) -> Playlist:
         from .api.catalog import get_playlist
-        p, _ = get_playlist(self._ensure_client(), uuid)
+        p, _ = get_playlist(self.client, uuid)
         return p
 
     def get_video(self, video_id: int) -> Video:
         from .api.catalog import get_video
-        v, _ = get_video(self._ensure_client(), video_id)
+        v, _ = get_video(self.client, video_id)
         return v
 
     def search(self, query: str, **kw):
         from .api.catalog import search
-        return search(self._ensure_client(), query, **kw)
+        return search(self.client, query, **kw)
 
     def track(self, track_id) -> Track:
         return self.get_track(int(track_id))
@@ -341,89 +356,90 @@ class Session:
     def get_albums(self, album_ids: list = None, **kwargs) -> list[Album]:
         """Get multiple albums with filtering options."""
         from .api.catalog import get_albums
-        albums, _ = get_albums(self._ensure_client(), album_ids=album_ids, **kwargs)
+        albums, _ = get_albums(self.client, album_ids=album_ids, **kwargs)
         return albums
 
     def get_artists(self, artist_ids: list = None, **kwargs) -> list[Artist]:
         """Get multiple artists with filtering options."""
         from .api.catalog import get_artists
-        artists, _ = get_artists(self._ensure_client(), artist_ids=artist_ids, **kwargs)
+        artists, _ = get_artists(self.client, artist_ids=artist_ids, **kwargs)
         return artists
 
     def get_tracks(self, track_ids: list = None, **kwargs) -> list[Track]:
         """Get multiple tracks with filtering options."""
         from .api.catalog import get_tracks
-        tracks, _ = get_tracks(self._ensure_client(), track_ids=track_ids, **kwargs)
+        tracks, _ = get_tracks(self.client, track_ids=track_ids, **kwargs)
         return tracks
 
     def get_playlists(self, playlist_ids: list = None, **kwargs) -> list[Playlist]:
         """Get multiple playlists with filtering options."""
         from .api.catalog import get_playlists
-        playlists, _ = get_playlists(self._ensure_client(), playlist_ids=playlist_ids, **kwargs)
+        playlists, _ = get_playlists(self.client, playlist_ids=playlist_ids, **kwargs)
         return playlists
 
     def get_videos(self, video_ids: list = None, **kwargs) -> list[Video]:
         """Get multiple videos with filtering options."""
         from .api.catalog import get_videos
-        videos, _ = get_videos(self._ensure_client(), video_ids=video_ids, **kwargs)
+        videos, _ = get_videos(self.client, video_ids=video_ids, **kwargs)
         return videos
 
     def search_albums(self, query: str, **kwargs) -> list[Album]:
         """Search specifically for albums."""
         from .api.catalog import search_albums
-        albums, _ = search_albums(self._ensure_client(), query, **kwargs)
+        albums, _ = search_albums(self.client, query, **kwargs)
         return albums
 
     def search_artists(self, query: str, **kwargs) -> list[Artist]:
         """Search specifically for artists."""
         from .api.catalog import search_artists
-        artists, _ = search_artists(self._ensure_client(), query, **kwargs)
+        artists, _ = search_artists(self.client, query, **kwargs)
         return artists
 
     def search_tracks(self, query: str, **kwargs) -> list[Track]:
         """Search specifically for tracks."""
         from .api.catalog import search_tracks
-        tracks, _ = search_tracks(self._ensure_client(), query, **kwargs)
+        tracks, _ = search_tracks(self.client, query, **kwargs)
         return tracks
 
     def search_playlists(self, query: str, **kwargs) -> list[Playlist]:
         """Search specifically for playlists."""
         from .api.catalog import search_playlists
-        playlists, _ = search_playlists(self._ensure_client(), query, **kwargs)
+        playlists, _ = search_playlists(self.client, query, **kwargs)
         return playlists
 
     def search_videos(self, query: str, **kwargs) -> list[Video]:
         """Search specifically for videos."""
         from .api.catalog import search_videos
-        videos, _ = search_videos(self._ensure_client(), query, **kwargs)
+        videos, _ = search_videos(self.client, query, **kwargs)
         return videos
 
     def search_suggestions(self, query: str, **kwargs):
         """Get search suggestions for a query."""
         from .api.catalog import search_suggestions
-        return search_suggestions(self._ensure_client(), query, **kwargs)
+        return search_suggestions(self.client, query, **kwargs)
 
     # ── User collections using oapi ──────────────────────────────────────
 
     def get_user_collections(self):
         """Get user collections manager for favorites and collections."""
         from .api.user import UserCollections
-        return UserCollections(self._ensure_client())
+        return UserCollections(self.client)
 
     def get_user_tracks(self, country_code: str = None, **kwargs) -> list[Track]:
         """Get user's favorite tracks, hydrated with artists+albums."""
         from .api.catalog import _hydrate_tracks
         from .api.user import UserTracks
-        tracks, _ = UserTracks(self._ensure_client()).get_tracks(
+        tracks, _ = UserTracks(self.client).get_tracks(
             country_code=country_code or self.country_code, **kwargs
         )
-        return _hydrate_tracks(self._ensure_client(), tracks,
-                               country_code=self.country_code)
+        return _hydrate_tracks(self.client, tracks,
+                               country_code=self.country_code,
+                               fetch_album_covers=self.fetch_album_covers)
 
     def get_user_albums(self, country_code: str = None, **kwargs) -> list[Album]:
         """Get user's favorite albums."""
         from .api.user import UserAlbums
-        albums, _ = UserAlbums(self._ensure_client()).get_albums(
+        albums, _ = UserAlbums(self.client).get_albums(
             country_code=country_code or self.country_code, **kwargs
         )
         return albums
@@ -431,7 +447,7 @@ class Session:
     def get_user_artists(self, country_code: str = None, **kwargs) -> list[Artist]:
         """Get user's favorite artists."""
         from .api.user import UserArtists
-        artists, _ = UserArtists(self._ensure_client()).get_artists(
+        artists, _ = UserArtists(self.client).get_artists(
             country_code=country_code or self.country_code, **kwargs
         )
         return artists
@@ -439,13 +455,13 @@ class Session:
     def get_user_playlists(self, **kwargs) -> list[Playlist]:
         """Get user's favorite playlists."""
         from .api.user import UserPlaylists
-        playlists, _ = UserPlaylists(self._ensure_client()).get_playlists(**kwargs)
+        playlists, _ = UserPlaylists(self.client).get_playlists(**kwargs)
         return playlists
 
     def get_user_videos(self, country_code: str = None, **kwargs) -> list[Video]:
         """Get user's favorite videos."""
         from .api.user import UserVideos
-        videos, _ = UserVideos(self._ensure_client()).get_videos(
+        videos, _ = UserVideos(self.client).get_videos(
             country_code=country_code or self.country_code, **kwargs
         )
         return videos
@@ -456,24 +472,25 @@ class Session:
         """Get album tracks with artists+albums hydrated (2 calls)."""
         from .api.catalog import get_album, _hydrate_tracks
         from .types import AlbumInclude
-        album, _ = get_album(self._ensure_client(), album_id,
+        album, _ = get_album(self.client, album_id,
                              include=(AlbumInclude.ITEMS, AlbumInclude.ARTISTS,
                                       AlbumInclude.COVER_ART, AlbumInclude.SIMILAR_ALBUMS))
-        return _hydrate_tracks(self._ensure_client(), album.tracks,
-                               country_code=self.country_code)
+        return _hydrate_tracks(self.client, album.tracks,
+                               country_code=self.country_code,
+                               fetch_album_covers=self.fetch_album_covers)
 
     def get_artist_albums(self, artist_id: int) -> list[Album]:
         """Get artist albums via relationship endpoint."""
         from .api.catalog import get_artist
         from .types import ArtistInclude
-        artist, _ = get_artist(self._ensure_client(), artist_id,
+        artist, _ = get_artist(self.client, artist_id,
                                include=(ArtistInclude.ALBUMS,))
         return artist.albums
 
     def get_artist_tracks(self, artist_id: int, limit = 20) -> list[Track]:
         """Get artist tracks via relationship endpoint (already hydrated)."""
         from .api.catalog import get_artist_tracks
-        tracks, _ = get_artist_tracks(self._ensure_client(), artist_id,
+        tracks, _ = get_artist_tracks(self.client, artist_id,
                                       country_code=self.country_code, limit=limit)
         return tracks
 
@@ -481,84 +498,96 @@ class Session:
         """Get playlist tracks with artists+albums hydrated (2 calls)."""
         from .api.catalog import get_playlist, _hydrate_tracks
         from .types import PlaylistInclude
-        playlist, _ = get_playlist(self._ensure_client(), uuid,
+        playlist, _ = get_playlist(self.client, uuid,
                                    include=(PlaylistInclude.ITEMS,))
-        return _hydrate_tracks(self._ensure_client(), playlist.tracks,
-                               country_code=self.country_code)
+        return _hydrate_tracks(self.client, playlist.tracks,
+                               country_code=self.country_code,
+                               fetch_album_covers=self.fetch_album_covers)
 
     def get_artist_by_handle(self, handle: str) -> Artist | None:
         """Get artist by handle using oapi."""
         from .api.catalog import get_artists
-        artists, _ = get_artists(self._ensure_client(), handles=[handle])
+        artists, _ = get_artists(self.client, handles=[handle])
         return artists[0] if artists else None
 
     def create_playlist(self, name: str, description: str = "") -> Playlist:
         from .api.catalog import create_playlist
-        p, _ = create_playlist(self._ensure_client(), name, description)
+        p, _ = create_playlist(self.client, name, description)
         return p
 
     def add_tracks_to_playlist(self, playlist_id: str, track_ids: list[str]) -> None:
         from .api.catalog import add_tracks_to_playlist
-        add_tracks_to_playlist(self._ensure_client(), playlist_id, track_ids)
+        add_tracks_to_playlist(self.client, playlist_id, track_ids)
 
     def remove_tracks_from_playlist(self, playlist_id: str, track_ids: list[str]) -> None:
         from .api.catalog import remove_tracks_from_playlist
-        remove_tracks_from_playlist(self._ensure_client(), playlist_id, track_ids)
+        remove_tracks_from_playlist(self.client, playlist_id, track_ids)
 
     def delete_playlist(self, playlist_id: str) -> None:
         from .api.catalog import delete_playlist
-        delete_playlist(self._ensure_client(), playlist_id)
+        delete_playlist(self.client, playlist_id)
 
     # ── v1/v2 only (no oapi equivalent or oapi insufficient) ────────────
 
     def get_artist_top_tracks(self, artist_id: int, limit: int = 10):
         """Get artist top tracks (v1 only - no oapi equivalent)."""
         from .api.catalog_v1 import get_artist_top_tracks
-        return get_artist_top_tracks(self._ensure_client(), artist_id, self, limit)
+        return get_artist_top_tracks(self.client, artist_id, self, limit)
 
     def get_lyrics(self, track_id: int) -> Lyrics:
         """Get track lyrics (v1 only - no oapi equivalent)."""
         from .api.catalog_v1 import get_lyrics
-        return get_lyrics(self._ensure_client(), track_id, self)
+        return get_lyrics(self.client, track_id, self)
 
     def suggest(self, query: str, limit: int = 5) -> dict:
         """Get search suggestions (v2 only - different from oapi search suggestions)."""
         from .api.catalog_v2 import suggest
-        return suggest(self._ensure_client(), query, limit)
+        return suggest(self.client, query, limit)
 
     def feed_activities(self, limit: int = 9) -> list[dict]:
         """Get user feed activities (v2 only - no oapi equivalent)."""
         from .api.catalog_v2 import feed_activities
-        return feed_activities(self._ensure_client(), self.user_id, limit)
+        return feed_activities(self.client, self.user_id, limit)
 
     def is_artist_playable(self, artist_id: int) -> bool:
         """Check if artist is playable (v2 only - no oapi equivalent)."""
         from .api.catalog_v2 import is_artist_playable
-        return is_artist_playable(self._ensure_client(), artist_id)
+        return is_artist_playable(self.client, artist_id)
 
     # ── stream ───────────────────────────────────────────────────────────
 
     def get_stream(self, track_id: int, quality: Quality | str = Quality.LOSSLESS) -> StreamInfo:
         if self.widevine_cdm_path:
-            return get_stream_oapi(self._ensure_client(), track_id, quality)
-        return get_stream_v1(self._ensure_client(), track_id, quality)
+            return get_stream_oapi(self.client, track_id, quality)
+        return get_stream_v1(self.client, track_id, quality)
 
     def get_decryption_keys(self, stream: StreamInfo) -> list[tuple[str, str]]:
-        return get_decryption_keys(self._ensure_client(), stream, self.widevine_cdm_path)
+        return get_decryption_keys(
+            self.client, stream, cdm=self.cdm,
+            service_cert=self.service_cert(stream.license_url),
+        )
+
+    def service_cert(self, license_url: str) -> bytes:
+        """Fetch and cache the Widevine service certificate by license URL."""
+        if license_url not in self._service_certs:
+            self._service_certs[license_url] = fetch_service_certificate(
+                self.client, license_url,
+            )
+        return self._service_certs[license_url]
 
     def get_video_url(self, video_id: int, quality: str = Quality.HIGH) -> str:
-        return get_video_url(self._ensure_client(), video_id, quality)
+        return get_video_url(self.client, video_id, quality)
 
     # ── pages (v1 only — no oapi equivalent) ─────────────────────────────
 
     def get_artist_page(self, artist_id: int) -> Page:
-        return get_artist_page(self._ensure_client(), artist_id, _session=self)
+        return get_artist_page(self.client, artist_id, _session=self)
 
     def get_album_page(self, album_id: int) -> Page:
-        return get_page(self._ensure_client(), "album", _session=self, albumId=album_id)
+        return get_page(self.client, "album", _session=self, albumId=album_id)
 
     def mix(self, mix_id: str) -> Mix:
-        c = self._ensure_client()
+        c = self.client
         page = get_page(c, "mix", _session=self, mixId=mix_id)
         if len(page.categories) < 2:
             raise NotFoundError(f"Mix {mix_id} not found or empty", status=404)
@@ -572,16 +601,16 @@ class Session:
         return m
 
     def get_page(self, name: str, **kw) -> Page:
-        return get_page(self._ensure_client(), name, _session=self, **kw)
+        return get_page(self.client, name, _session=self, **kw)
 
     def get_home(self) -> Page:
-        return get_home(self._ensure_client(), _session=self)
+        return get_home(self.client, _session=self)
 
     def home(self, use_legacy_endpoint: bool = True) -> Page:
         return self.get_home()
 
     def get_explore(self) -> Page:
-        return get_explore(self._ensure_client(), _session=self)
+        return get_explore(self.client, _session=self)
 
     def explore(self) -> Page:
         return self.get_explore()
@@ -654,7 +683,7 @@ class _RequestProxy:
         self._s = session
 
     def request(self, method: str, path: str, **kw) -> Any:
-        c = self._s._ensure_client()
+        c = self._s.client
         url = f"https://api.tidal.com/v1/{path}"
         kw.setdefault("params", {})["countryCode"] = c.country_code
         return c.request(method, url, **kw)

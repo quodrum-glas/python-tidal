@@ -279,6 +279,7 @@ def get_artist_tracks(
     country_code: str | None = None,
     collapse_by: str = "FINGERPRINT",
     limit: int = 20,
+    fetch_album_covers: bool = False,
 ) -> tuple[list[Track], Document]:
     """Fetch artist tracks via the relationship endpoint (paginated)."""
     params = _params(
@@ -291,7 +292,10 @@ def get_artist_tracks(
     )
     tracks = [Track(r, doc, client) for r in items]
     if tracks:
-        tracks = _hydrate_tracks(client, tracks, country_code=country_code)
+        tracks = _hydrate_tracks(
+            client, tracks, country_code=country_code,
+            fetch_album_covers=fetch_album_covers,
+        )
     return tracks, doc
 
 
@@ -300,6 +304,7 @@ def _hydrate_tracks(
     tracks: list[Track],
     *,
     country_code: str | None = None,
+    fetch_album_covers: bool,
 ) -> list[Track]:
     """Re-fetch tracks with artists+albums+coverArt. Returns new Track instances."""
     ids = [t.id for t in tracks]
@@ -307,7 +312,7 @@ def _hydrate_tracks(
         return tracks
 
     doc = _fetch_tracks_doc(client, ids, country_code)
-    if client.fetch_album_covers:
+    if fetch_album_covers:
         _fetch_album_covers(client, doc, country_code)
     return _tracks_from_doc(doc, ids, client)
 

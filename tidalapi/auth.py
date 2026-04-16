@@ -16,6 +16,13 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import requests
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from .exceptions import AuthError
 
@@ -161,7 +168,7 @@ class Auth:
             "scope": "r_usr+w_usr+w_sub",
             "code_verifier": self._code_verifier,
             "client_unique_key": self._client_unique_key,
-        })
+        }, timeout=(5, 15))
         if not resp.ok:
             raise AuthError(f"PKCE token exchange failed: {resp.status_code} {resp.text[:300]}")
 
@@ -191,7 +198,7 @@ class Auth:
         resp = requests.post(DEVICE_AUTH_URL, data={
             "client_id": client_id,
             "scope": "r_usr w_usr w_sub",
-        })
+        }, timeout=(5, 15))
         if not resp.ok:
             raise AuthError(f"Device auth request failed: {resp.status_code}")
 
@@ -238,7 +245,7 @@ class Auth:
             "device_code": link.device_code,
             "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
             "scope": "r_usr w_usr w_sub",
-        })
+        }, timeout=(5, 15))
         if resp.ok:
             self._apply_token_response(resp.json())
             return True
@@ -263,6 +270,13 @@ class Auth:
 
     # ── refresh ──────────────────────────────────────────────────────────
 
+    @retry(
+        retry=retry_if_exception_type((requests.ConnectionError, requests.Timeout)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=0.5, max=3),
+        before_sleep=before_sleep_log(log, logging.WARNING),
+        reraise=True,
+    )
     def refresh(self) -> None:
         data: dict[str, str] = {
             "grant_type": "refresh_token",
@@ -272,7 +286,7 @@ class Auth:
         if self.client_secret:
             data["client_secret"] = self.client_secret
 
-        resp = requests.post(AUTH_URL, data=data)
+        resp = requests.post(AUTH_URL, data=data, timeout=(3, 5))
         if not resp.ok:
             raise AuthError(f"Token refresh failed: {resp.status_code}", status=resp.status_code)
         self._apply_token_response(resp.json())

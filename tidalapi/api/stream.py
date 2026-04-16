@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from enum import Enum
@@ -16,6 +17,12 @@ from typing import Any
 from ..client import Client
 from ..exceptions import ManifestError, StreamError
 
+try:
+    from pywidevine import PSSH
+except ImportError:
+    PSSH = None
+
+logger = logging.getLogger(__name__)
 
 class Quality(str, Enum):
     LOW = "LOW"
@@ -70,6 +77,8 @@ class StreamInfo:
     track_presentation: str = ""     # "FULL" | "PREVIEW"
     preview_reason: str = ""         # why preview was served instead of full
     manifest_hash: str = ""          # unique manifest hash
+    representation_id: str = ""       # e.g. "FLAC_HIRES,96000,24"
+    duration: float = 0.0             # track duration in seconds (from MPD)
     raw: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
     @property
@@ -152,19 +161,33 @@ class _MpdInfo:
     pssh_b64: str          # Widevine PSSH from ContentProtection (base64)
     default_kid: str       # default_KID from mp4protection
     encryption_scheme: str # e.g. "cbcs" or "cenc"
+    representation_id: str # e.g. "FLAC_HIRES,96000,24"
+    duration: float        # mediaPresentationDuration in seconds
 
 
-def _parse_mpd(xml_text: str, preferred_codec: str = "") -> _MpdInfo:
+def _parse_mpd(xml_text: str) -> _MpdInfo:
     """Parse an MPEG-DASH MPD into structured info.
 
-    When the MPD contains multiple Representations (adaptive), pick the one
-    matching *preferred_codec* (e.g. "flac").  Falls back to the first.
+    When the MPD contains multiple Representations (adaptive), picks the
+    highest bandwidth (best quality).
     """
     if "<?xml" in xml_text:
         idx = xml_text.index("?>") + 2
         xml_text = xml_text[idx:].strip()
 
     root = ET.fromstring(xml_text)
+
+    # Parse duration from mediaPresentationDuration="PT3M27.438S"
+    import re
+    duration = 0.0
+    dur_str = root.get("mediaPresentationDuration", "")
+    dur_match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:([\d.]+)S)?", dur_str)
+    if dur_match:
+        duration = (
+            int(dur_match.group(1) or 0) * 3600
+            + int(dur_match.group(2) or 0) * 60
+            + float(dur_match.group(3) or 0)
+        )
 
     period = root.find("mpd:Period", _NS)
     if period is None:
@@ -194,13 +217,7 @@ def _parse_mpd(xml_text: str, preferred_codec: str = "") -> _MpdInfo:
     if not reps:
         raise ManifestError("No Representation in MPD")
 
-    rep = reps[0]  # default: first (highest bandwidth)
-    if preferred_codec:
-        pc = preferred_codec.lower()
-        for r in reps:
-            if pc in (r.get("codecs", "").lower() or r.get("id", "").lower()):
-                rep = r
-                break
+    rep = max(reps, key=lambda r: int(r.get("bandwidth", "0")))
 
     codec = rep.get("codecs", "")
     sample_rate = int(rep.get("audioSamplingRate", "44100"))
@@ -252,6 +269,8 @@ def _parse_mpd(xml_text: str, preferred_codec: str = "") -> _MpdInfo:
         pssh_b64=pssh_b64,
         default_kid=default_kid,
         encryption_scheme=encryption_scheme,
+        representation_id=rep_id,
+        duration=duration,
     )
 
 
@@ -361,17 +380,11 @@ def _build_stream_info(raw: dict, track_id: int) -> StreamInfo:
     pssh_from_mpd = ""
     default_kid = ""
     encryption_scheme = ""
+    representation_id = ""
+    duration = 0.0
 
     if ManifestType.MPD.value in mime:
-        # Determine preferred codec from requested quality
-        quality = raw.get("audioQuality", "")
-        preferred = ""
-        if quality in ("HI_RES_LOSSLESS", "HIRES_LOSSLESS"):
-            preferred = "flac"  # picks FLAC_HIRES first (highest SR), else FLAC
-        elif quality == "LOSSLESS":
-            preferred = "flac"
-
-        mpd = _parse_mpd(manifest_text, preferred_codec=preferred)
+        mpd = _parse_mpd(manifest_text)
         codec = mpd.codec
         init_url = mpd.init_url
         urls = mpd.urls
@@ -380,6 +393,8 @@ def _build_stream_info(raw: dict, track_id: int) -> StreamInfo:
         pssh_from_mpd = mpd.pssh_b64
         default_kid = mpd.default_kid
         encryption_scheme = mpd.encryption_scheme
+        representation_id = mpd.representation_id
+        duration = mpd.duration
     elif ManifestType.BTS.value in mime:
         bts = json.loads(manifest_text)
         urls = tuple(bts.get("urls", []))
@@ -414,6 +429,8 @@ def _build_stream_info(raw: dict, track_id: int) -> StreamInfo:
         track_presentation=raw.get("trackPresentation", ""),
         preview_reason=raw.get("previewReason", ""),
         manifest_hash=raw.get("manifestHash", ""),
+        representation_id=representation_id,
+        duration=duration,
         raw=raw,
     )
 
@@ -425,41 +442,46 @@ def _build_stream_info(raw: dict, track_id: int) -> StreamInfo:
 _CERT_REQUEST = bytes([0x08, 0x04])
 
 
+def fetch_service_certificate(client: Client, license_url: str) -> bytes:
+    """Fetch the Widevine service certificate from the license server."""
+    resp = client.request(
+        "POST", license_url,
+        data=_CERT_REQUEST,
+        headers={"Content-Type": "application/octet-stream"},
+    )
+    logger.debug(f"cert resp len: {len(resp.content)}")
+    return resp.content
+
+
 def get_decryption_keys(
     client: Client,
     stream: StreamInfo,
-    cdm_path: str | Path | None = None,
+    *,
+    cdm: Any,
+    service_cert: bytes,
 ) -> list[tuple[str, str]]:
     """Exchange with TIDAL's Widevine license server, return (kid, key) hex pairs."""
-    from pathlib import Path
+    logger.debug(f"get_decryption_keys: {stream.track_id}")
 
-    from pywidevine import PSSH, Cdm, Device
-
-    if not cdm_path:
-        raise FileNotFoundError("No Widevine CDM path configured")
-
-    device = Device.load(Path(cdm_path))
-    cdm = Cdm.from_device(device)
+    if not cdm:
+        raise RuntimeError("No Widevine CDM loaded on session")
     session_id = cdm.open()
+    logger.debug(f"cdm session_id: {session_id}")
 
     try:
-        cert_resp = client.request(
-            "POST", stream.license_url,
-            data=_CERT_REQUEST,
-            headers={"Content-Type": "application/octet-stream"},
-        )
-        cdm.set_service_certificate(session_id, cert_resp.content)
-
-        pssh = PSSH(stream.init_data[0])
-        challenge = cdm.get_license_challenge(session_id, pssh)
+        cdm.set_service_certificate(session_id, service_cert)
+        challenge = cdm.get_license_challenge(session_id, PSSH(stream.init_data[0]))
+        logger.debug(f"built challenge of len: {len(challenge)}")
 
         resp = client.request(
             "POST", stream.license_url,
             data=challenge,
             headers={"Content-Type": "application/octet-stream"},
         )
+        logger.debug(f"licence resp len: {len(resp.content)}")
 
         cdm.parse_license(session_id, resp.content)
+        logger.debug(f"cdm parsed licence")
         return [
             (key.kid.hex, key.key.hex())
             for key in cdm.get_keys(session_id)
