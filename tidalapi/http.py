@@ -94,7 +94,7 @@ class TTLRequestsSessionManager:
         """Return the current session, nuking only if idle > ttl."""
         idle = time.monotonic() - self._last_request
         if idle > self.ttl:
-            log.info("Nuking idle HTTP session (idle %.0fs > %ds)", idle, self.ttl)
+            log.debug("Nuking idle HTTP session (idle %.0fs > %ds)", idle, self.ttl)
             self._session.close()
             self._session = self._make_session()
         return self._session
@@ -103,7 +103,7 @@ class TTLRequestsSessionManager:
 
     def recycle_pools(self) -> None:
         """Close all pooled sockets, forcing fresh TCP+TLS on next request."""
-        log.info("Recycling connection pools")
+        log.debug("Recycling connection pools")
         for adapter in self._session.adapters.values():
             adapter.close()
 
