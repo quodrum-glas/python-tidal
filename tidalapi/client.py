@@ -107,7 +107,7 @@ class Client:
         retry=retry_if_exception_type(_Retryable),
         stop=stop_after_attempt(3),
         wait=_retry_after,
-        before_sleep=before_sleep_log(log, logging.WARNING),
+        before_sleep=before_sleep_log(log, logging.DEBUG),
         reraise=True,
     )
     @_throttle

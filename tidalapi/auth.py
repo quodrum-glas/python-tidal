@@ -274,7 +274,7 @@ class Auth:
         retry=retry_if_exception_type((requests.ConnectionError, requests.Timeout)),
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=0.5, max=3),
-        before_sleep=before_sleep_log(log, logging.WARNING),
+        before_sleep=before_sleep_log(log, logging.DEBUG),
         reraise=True,
     )
     def refresh(self) -> None:
