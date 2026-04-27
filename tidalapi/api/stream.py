@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import base64
 import json
-import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from enum import Enum
@@ -22,7 +21,6 @@ try:
 except ImportError:
     PSSH = None
 
-logger = logging.getLogger(__name__)
 
 class Quality(str, Enum):
     LOW = "LOW"
@@ -449,7 +447,6 @@ def fetch_service_certificate(client: Client, license_url: str) -> bytes:
         data=_CERT_REQUEST,
         headers={"Content-Type": "application/octet-stream"},
     )
-    logger.debug(f"cert resp len: {len(resp.content)}")
     return resp.content
 
 
@@ -461,27 +458,22 @@ def get_decryption_keys(
     service_cert: bytes,
 ) -> list[tuple[str, str]]:
     """Exchange with TIDAL's Widevine license server, return (kid, key) hex pairs."""
-    logger.debug(f"get_decryption_keys: {stream.track_id}")
 
     if not cdm:
         raise RuntimeError("No Widevine CDM loaded on session")
     session_id = cdm.open()
-    logger.debug(f"cdm session_id: {session_id}")
 
     try:
         cdm.set_service_certificate(session_id, service_cert)
         challenge = cdm.get_license_challenge(session_id, PSSH(stream.init_data[0]))
-        logger.debug(f"built challenge of len: {len(challenge)}")
 
         resp = client.request(
             "POST", stream.license_url,
             data=challenge,
             headers={"Content-Type": "application/octet-stream"},
         )
-        logger.debug(f"licence resp len: {len(resp.content)}")
 
         cdm.parse_license(session_id, resp.content)
-        logger.debug(f"cdm parsed licence")
         return [
             (key.kid.hex, key.key.hex())
             for key in cdm.get_keys(session_id)
