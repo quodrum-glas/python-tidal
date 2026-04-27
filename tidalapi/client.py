@@ -18,7 +18,7 @@ from tenacity import (
 
 from .auth import Auth
 from .exceptions import NotFoundError, RateLimitError, TidalError
-from .http import TTLRequestsSessionManager
+from .http import TidalRequestsSession
 from .utils import lazy
 
 log = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ class Client:
     def __init__(self, auth: Auth, http_timeout: tuple[float, float],
                  min_request_gap: float = 0.05):
         self.auth = auth
-        self.http = TTLRequestsSessionManager(
+        self.http = TidalRequestsSession(
             timeout=http_timeout,
             pool_connections=4,
             pool_maxsize=4,

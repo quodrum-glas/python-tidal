@@ -28,7 +28,7 @@ __version__ = "0.1.0"
 
 from .auth import Auth, LinkLogin
 from .client import Client
-from .http import TTLRequestsSessionManager
+from .http import TidalRequestsSession
 from .exceptions import (
     AuthError,
     ManifestError,
@@ -63,7 +63,7 @@ __all__ = [
     "Auth",
     "Client",
     "LinkLogin",
-    "TTLRequestsSessionManager",
+    "TidalRequestsSession",
     "Session",
     # v1 models (top-level for compat)
     "Album",

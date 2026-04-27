@@ -1,4 +1,4 @@
-"""Managed requests.Session with TTL nuke and reactive pool recycle."""
+"""Managed requests.Session with idle-based reset and TCP keepalive."""
 
 from __future__ import annotations
 
@@ -13,11 +13,14 @@ from urllib3.util.retry import Retry
 log = logging.getLogger(__name__)
 
 
-class _KeepAliveAdapter(HTTPAdapter):
-    """HTTPAdapter that sets TCP keepalive on every socket.
+class TidalRequestsSession(requests.Session):
+    """requests.Session with idle-based reset and reactive pool cleanup.
 
-    Idle-time=60s, interval=15s, probes=4 → detects dead peer in ~120s,
-    well before TIDAL's ~180s server-side idle timeout.
+    After *ttl* seconds of inactivity the session is reset (adapters
+    re-mounted, cookies cleared) so the next request starts clean.
+
+    On transient connection errors the failing adapter's pools are closed
+    so the caller's retry layer gets a fresh socket.
     """
 
     _KEEPALIVE_OPTS = [
@@ -26,37 +29,13 @@ class _KeepAliveAdapter(HTTPAdapter):
         (socket.SOL_TCP, socket.TCP_KEEPINTVL, 15),
         (socket.SOL_TCP, socket.TCP_KEEPCNT, 4),
     ]
-
-    def send(self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None):
-        # Patch socket_options on the pool manager before sending
-        pm = self.poolmanager
-        if pm and not getattr(pm, "_ka_patched", False):
-            pm.connection_pool_kw.setdefault("socket_options", [])
-            existing = pm.connection_pool_kw["socket_options"]
-            for opt in self._KEEPALIVE_OPTS:
-                if opt not in existing:
-                    existing.append(opt)
-            pm._ka_patched = True
-        return super().send(request, stream=stream, timeout=timeout,
-                            verify=verify, cert=cert, proxies=proxies)
-
-
-class TTLRequestsSessionManager:
-    """requests.Session with idle-based nuke and reactive pool recycle.
-
-    The session is destroyed and rebuilt only when it has been *idle* longer
-    than ``ttl`` seconds — i.e. the server has likely dropped the connection.
-    Active sessions are never nuked.
-
-    On transient connection errors the pool is recycled (sockets closed,
-    Session kept) so the next retry hits a fresh TCP+TLS connection.
-    """
+    _IDLE = 60
 
     def __init__(
         self,
         *,
         timeout: tuple[float, float],
-        ttl: float = 3 * 60,
+        ttl: float = 60 * 60,
         pool_connections: int = 4,
         pool_maxsize: int = 4,
         pool_block: bool = True,
@@ -65,6 +44,7 @@ class TTLRequestsSessionManager:
         retry_backoff: float = 0.3,
         retry_status_forcelist: tuple[int, ...] = (502, 503, 504),
     ) -> None:
+        super().__init__()
         self.timeout = timeout
         self.ttl = ttl
         self._adapter_kw = dict(
@@ -79,64 +59,43 @@ class TTLRequestsSessionManager:
                 allowed_methods=False,
             ),
         )
-        self._session = self._make_session()
-        self._last_request = time.monotonic()
+        self._mount_adapters()
+        now = time.monotonic()
+        self._last_request = now
+        self._last_reset = now
 
-    def _make_session(self) -> requests.Session:
-        s = requests.Session()
-        s.mount("https://", _KeepAliveAdapter(**self._adapter_kw))
-        return s
-
-    # -- session access with idle-based nuke ------------------------------
-
-    @property
-    def session(self) -> requests.Session:
-        """Return the current session, nuking only if idle > ttl."""
-        idle = time.monotonic() - self._last_request
-        if idle > self.ttl:
-            log.debug("Nuking idle HTTP session (idle %.0fs > %ds)", idle, self.ttl)
-            self._session.close()
-            self._session = self._make_session()
-        return self._session
-
-    # -- reactive pool recycle --------------------------------------------
-
-    def recycle_pools(self) -> None:
-        """Close all pooled sockets, forcing fresh TCP+TLS on next request."""
-        log.debug("Recycling connection pools")
-        for adapter in self._session.adapters.values():
+    def _mount_adapters(self) -> None:
+        """Close existing adapters, clear, and mount fresh HTTPS adapter."""
+        for adapter in self.adapters.values():
             adapter.close()
+        self.adapters.clear()
+        adapter = HTTPAdapter(**self._adapter_kw)
+        self.mount("https://", adapter)
+        adapter.poolmanager.connection_pool_kw["socket_options"] = self._KEEPALIVE_OPTS
 
-    # -- request with reactive recycle on connection errors ----------------
+    def _check_lifecycle(self) -> None:
+        if 0 < self.ttl:
+            now = time.monotonic()
+            life = now - self._last_reset
+            if self.ttl < life:
+                idle = now - self._last_request
+                if self._IDLE < idle:
+                    log.info("Resetting session (ttl %.0fs > %ds). Idle for %.0fs", life, self.ttl, idle)
+                    self.reset()
+
+    def reset(self) -> None:
+        """Reset session: fresh adapters, clear cookies."""
+        self._mount_adapters()
+        self.cookies.clear()
+        self._last_reset = time.monotonic()
 
     def request(self, method: str, url: str, **kw) -> requests.Response:
-        """Send a request through the managed session.
-
-        On connection-level errors the pool is recycled before re-raising,
-        so the caller's retry layer gets a fresh socket on the next attempt.
-        """
+        self._check_lifecycle()
         kw.setdefault("timeout", self.timeout)
         try:
-            resp = self.session.request(method, url, **kw)
+            resp = super().request(method, url, **kw)
             self._last_request = time.monotonic()
             return resp
         except (requests.ConnectionError, requests.exceptions.ChunkedEncodingError):
-            self.recycle_pools()
+            self.get_adapter(url).close()
             raise
-
-    def get(self, url: str, **kw) -> requests.Response:
-        return self.request("GET", url, **kw)
-
-    def post(self, url: str, **kw) -> requests.Response:
-        return self.request("POST", url, **kw)
-
-    def put(self, url: str, **kw) -> requests.Response:
-        return self.request("PUT", url, **kw)
-
-    def delete(self, url: str, **kw) -> requests.Response:
-        return self.request("DELETE", url, **kw)
-
-    # -- lifecycle --------------------------------------------------------
-
-    def close(self) -> None:
-        self._session.close()
