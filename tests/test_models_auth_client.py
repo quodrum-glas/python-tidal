@@ -10,10 +10,10 @@ import pytest
 
 from tidalapi.auth import Auth, LinkLogin, _make_pkce
 from tidalapi.client import Client
-from tidalapi.models._base import _Model
-from tidalapi.models.album import Album
-from tidalapi.models.artist import Artist
-from tidalapi.models.track import Track
+from tidalapi.models_v1._base import _Model
+from tidalapi.models_v1.album import Album
+from tidalapi.models_v1.artist import Artist
+from tidalapi.models_v1.track import Track
 
 
 # -- _Model base -------------------------------------------------------------
@@ -48,14 +48,13 @@ class TestArtist:
 
     def test_image(self):
         a = Artist(_ARTIST_RAW, MagicMock())
-        url = a.image(320, 320)
+        url = a.image(320)
         assert "abc/def" in url
         assert "320x320" in url
 
-    def test_image_no_picture_raises(self):
+    def test_image_no_picture_returns_empty(self):
         a = Artist({"id": 1, "name": "X"}, MagicMock())
-        with pytest.raises(AttributeError):
-            a.image()
+        assert a.image() == ""
 
     def test_repr(self):
         a = Artist(_ARTIST_RAW, MagicMock())
@@ -87,7 +86,7 @@ class TestAlbum:
 
     def test_image(self):
         a = Album(_ALBUM_RAW, MagicMock())
-        url = a.image(640, 640)
+        url = a.image(640)
         assert "aa/bb/cc" in url
         assert "640x640" in url
 
@@ -125,9 +124,9 @@ class TestTrack:
         t = Track(_TRACK_RAW, MagicMock())
         assert t.album.name == "OK Computer"
 
-    def test_media_metadata_tags(self):
+    def test_media_tags(self):
         t = Track(_TRACK_RAW, MagicMock())
-        assert "LOSSLESS" in t.media_metadata_tags
+        assert "LOSSLESS" in t.media_tags
 
     def test_full_name_with_version(self):
         raw = {**_TRACK_RAW, "version": "Remastered"}

@@ -15,15 +15,15 @@ from tidalapi.exceptions import (
     TidalError,
     TooManyRequests,
 )
-from tidalapi.stream import (
+from tidalapi.api.stream import (
+    BTSManifest,
     ManifestMimeType,
     ManifestType,
     Quality,
     StreamInfo,
-    _BTSManifest,
-    _parse_mpd,
+    _build_stream_info,
 )
-from tidalapi.utils import lazy
+from tidalapi.utils import chunked_fetch, lazy, paginated_fetch
 
 
 # -- lazy descriptor ----------------------------------------------------------
@@ -78,6 +78,50 @@ class TestLazy:
         assert isinstance(Foo.__dict__["val"], lazy)
 
 
+# -- chunked_fetch ------------------------------------------------------------
+
+
+class TestChunkedFetch:
+    def test_single_chunk(self):
+        results = list(chunked_fetch(lambda ids: ids, [1, 2, 3], chunk_size=10))
+        assert results == [[1, 2, 3]]
+
+    def test_multiple_chunks(self):
+        results = list(chunked_fetch(lambda ids: ids, list(range(5)), chunk_size=2))
+        assert results == [[0, 1], [2, 3], [4]]
+
+    def test_empty(self):
+        results = list(chunked_fetch(lambda ids: ids, []))
+        assert results == []
+
+
+# -- paginated_fetch ----------------------------------------------------------
+
+
+class TestPaginatedFetch:
+    def test_single_page(self):
+        def fn(params):
+            return {"data": [1, 2], "links": {}}
+
+        results = list(paginated_fetch(fn))
+        assert len(results) == 1
+        assert results[0]["data"] == [1, 2]
+
+    def test_follows_cursor(self):
+        call_count = 0
+
+        def fn(params):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return {"data": ["a"], "links": {"next": "https://api.tidal.com?page[cursor]=abc"}}
+            return {"data": ["b"], "links": {}}
+
+        results = list(paginated_fetch(fn))
+        assert len(results) == 2
+        assert call_count == 2
+
+
 # -- exceptions ---------------------------------------------------------------
 
 
@@ -114,7 +158,8 @@ class TestQuality:
         assert Quality.HI_RES_LOSSLESS == "HI_RES_LOSSLESS"
 
     def test_compat_alias(self):
-        assert Quality.hi_res_lossless == Quality.HI_RES_LOSSLESS
+        assert Quality.HIRES_LOSSLESS.value == "HIRES_LOSSLESS"
+        assert Quality.HI_RES_LOSSLESS.value == "HI_RES_LOSSLESS"
 
     def test_is_string(self):
         assert isinstance(Quality.HIGH, str)
@@ -133,64 +178,25 @@ class TestManifestType:
 
 
 class TestStreamInfo:
-    def _bts_info(self, **kw) -> StreamInfo:
-        defaults = dict(
-            track_id=1, audio_quality="HIGH", audio_mode="STEREO",
-            manifest_mime_type=ManifestType.BTS.value,
-            bit_depth=16, sample_rate=44100, codec="AAC",
-            urls=("https://stream/1.m4a",),
-        )
-        defaults.update(kw)
-        return StreamInfo(**defaults)
-
-    def _mpd_info(self, **kw) -> StreamInfo:
-        defaults = dict(
-            track_id=2, audio_quality="LOSSLESS", audio_mode="STEREO",
-            manifest_mime_type=ManifestType.MPD.value,
-            bit_depth=16, sample_rate=44100, codec="FLAC",
-            urls=("seg-1", "seg-2"), init_url="init.mp4",
-        )
-        defaults.update(kw)
-        return StreamInfo(**defaults)
-
     def test_is_bts(self):
-        assert self._bts_info().is_bts
-        assert not self._bts_info().is_mpd
+        info = StreamInfo(track_id=1, manifest_mime_type=ManifestType.BTS.value,
+                          bts=BTSManifest({}))
+        assert info.is_bts
+        assert not info.is_mpd
 
     def test_is_mpd(self):
-        assert self._mpd_info().is_mpd
-        assert not self._mpd_info().is_bts
+        from mpegdash.parser import MPEGDASHParser
+        mpd = MPEGDASHParser.parse(_MINIMAL_MPD)
+        info = StreamInfo(track_id=2, manifest_mime_type=ManifestType.MPD.value, mpd=mpd)
+        assert info.is_mpd
+        assert not info.is_bts
 
-    def test_mime_type_flac(self):
-        assert self._mpd_info(codec="FLAC").mime_type == "audio/flac"
-
-    def test_mime_type_aac(self):
-        assert self._bts_info(codec="AAC").mime_type == "audio/mp4"
-
-    def test_file_extension(self):
-        assert self._mpd_info(codec="FLAC").file_extension == ".flac"
-        assert self._bts_info(codec="MP3").file_extension == ".mp3"
-        assert self._bts_info(codec="AAC").file_extension == ".m4a"
-
-    def test_get_manifest_data_mpd(self):
-        xml = "<MPD>test</MPD>"
-        b64 = base64.b64encode(xml.encode()).decode()
-        info = self._mpd_info(raw={"manifest": b64})
-        assert info.get_manifest_data() == xml
-
-    def test_get_manifest_data_bts_returns_none(self):
-        assert self._bts_info().get_manifest_data() is None
-
-    def test_get_stream_manifest_bts(self):
-        data = {"codecs": "flac", "urls": ["https://a.flac"]}
-        b64 = base64.b64encode(json.dumps(data).encode()).decode()
-        info = self._bts_info(raw={"manifest": b64})
-        m = info.get_stream_manifest()
-        assert m.get_codecs() == "flac"
-        assert m.get_urls() == ["https://a.flac"]
-
-    def test_get_stream_manifest_mpd_returns_none(self):
-        assert self._mpd_info().get_stream_manifest() is None
+    def test_is_drm(self):
+        info = StreamInfo(track_id=1, manifest_mime_type=ManifestType.BTS.value)
+        assert not info.is_drm
+        info = StreamInfo(track_id=1, manifest_mime_type=ManifestType.BTS.value,
+                          drm_system="WIDEVINE")
+        assert info.is_drm
 
 
 # -- BTSManifest -------------------------------------------------------------
@@ -198,20 +204,20 @@ class TestStreamInfo:
 
 class TestBTSManifest:
     def test_get_codecs(self):
-        m = _BTSManifest({"codecs": "flac", "urls": []})
+        m = BTSManifest({"codecs": "flac", "urls": []})
         assert m.get_codecs() == "flac"
 
     def test_get_urls(self):
-        m = _BTSManifest({"urls": ["a", "b"]})
+        m = BTSManifest({"urls": ["a", "b"]})
         assert m.get_urls() == ["a", "b"]
 
     def test_empty(self):
-        m = _BTSManifest({})
+        m = BTSManifest({})
         assert m.get_codecs() == ""
         assert m.get_urls() == []
 
 
-# -- MPD parsing --------------------------------------------------------------
+# -- _build_stream_info -------------------------------------------------------
 
 
 _MINIMAL_MPD = """\
@@ -232,20 +238,44 @@ _MINIMAL_MPD = """\
 """
 
 
-class TestParseMpd:
-    def test_basic(self):
-        codec, init_url, urls, sr = _parse_mpd(_MINIMAL_MPD)
-        assert codec == "FLAC"
-        assert init_url == "init.mp4"
-        assert len(urls) == 3
-        assert urls[0] == "seg-1.m4f"
-        assert sr == 96000
+class TestBuildStreamInfo:
+    def test_bts_manifest(self):
+        bts_json = json.dumps({"codecs": "flac", "urls": ["https://stream.tidal.com/track.flac"]})
+        raw = {
+            "trackId": 1,
+            "manifestMimeType": ManifestType.BTS.value,
+            "manifest": base64.b64encode(bts_json.encode()).decode(),
+        }
+        info = _build_stream_info(raw, 1)
+        assert info.is_bts
+        assert not info.is_mpd
+        assert info.bts.get_urls() == ["https://stream.tidal.com/track.flac"]
 
-    def test_aac_codec(self):
-        mpd = _MINIMAL_MPD.replace("flac", "mp4a.40.2")
-        codec, _, _, _ = _parse_mpd(mpd)
-        assert codec == "AAC"
+    def test_mpd_manifest(self):
+        raw = {
+            "trackId": 2,
+            "manifestMimeType": ManifestType.MPD.value,
+            "manifest": base64.b64encode(_MINIMAL_MPD.encode()).decode(),
+        }
+        info = _build_stream_info(raw, 2)
+        assert info.is_mpd
+        assert not info.is_bts
+        assert info.mpd is not None
 
-    def test_missing_period_raises(self):
-        with pytest.raises(Exception):
-            _parse_mpd('<MPD xmlns="urn:mpeg:dash:schema:mpd:2011"></MPD>')
+    def test_unknown_manifest_raises(self):
+        raw = {
+            "trackId": 3,
+            "manifestMimeType": "application/unknown",
+            "manifest": base64.b64encode(b"data").decode(),
+        }
+        with pytest.raises(ManifestError, match="Unknown manifest type"):
+            _build_stream_info(raw, 3)
+
+    def test_bad_base64_raises(self):
+        raw = {
+            "trackId": 4,
+            "manifestMimeType": ManifestType.BTS.value,
+            "manifest": "not-valid-base64!!!",
+        }
+        with pytest.raises(ManifestError, match="Failed to decode"):
+            _build_stream_info(raw, 4)
