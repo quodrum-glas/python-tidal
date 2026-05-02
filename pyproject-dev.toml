@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tidalapi"
+version = "0.1.0"
+description = "Clean Python client for the TIDAL music streaming API"
+requires-python = ">=3.10"
+# NO dependencies - installed via system packages
+dependencies = []
+
+[project.optional-dependencies]
+drm = []  # pywidevine installed via system
+dev = ["pytest", "pytest-mock", "ruff"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
