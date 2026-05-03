@@ -22,21 +22,36 @@ from __future__ import annotations
 
 import concurrent.futures
 import logging
+from collections.abc import Callable
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
+from .api.stream import (
+    Quality,
+    StreamInfo,
+    fetch_service_certificate,
+    get_decryption_keys,
+    get_stream_oapi,
+    get_stream_v1,
+    get_video_url,
+)
+from .api.user import Favorites, PlaylistFolders
 from .auth import Auth, LinkLogin
 from .client import Client
 from .exceptions import AuthError, NotFoundError
-from .models_v1 import (
-    Genre, Lyrics, Mix,
-    Page, PageLink, get_artist_page, get_explore, get_home, get_page,
-)
-from .models_v1 import Playlist as PlaylistV1
 from .models import Album, Artist, Playlist, Track, Video
-from .api.stream import Quality, StreamInfo, get_stream_v1, get_stream_oapi, get_decryption_keys, get_video_url, fetch_service_certificate
-from datetime import datetime, timedelta
-from .api.user import Favorites, PlaylistFolders
+from .models_v1 import (
+    Genre,
+    Lyrics,
+    Mix,
+    Page,
+    PageLink,
+    get_artist_page,
+    get_explore,
+    get_home,
+    get_page,
+)
 from .utils import lazy
 
 log = logging.getLogger(__name__)
@@ -76,7 +91,7 @@ class _UserProxy:
 
     def create_playlist(self, name: str, description: str = "") -> Playlist:
         raw = self._s.client.put(
-            f"https://api.tidal.com/v2/my-collection/playlists/folders/create-playlist",
+            "https://api.tidal.com/v2/my-collection/playlists/folders/create-playlist",
             params={
                 "name": name, "description": description, "folderId": "root",
                 "countryCode": self._s.client.country_code,
@@ -470,7 +485,7 @@ class Session:
 
     def get_album_tracks(self, album_id: int, limit: int = 0) -> list[Track]:
         """Get album tracks with artists+albums hydrated (2 calls)."""
-        from .api.catalog import get_album, _hydrate_tracks
+        from .api.catalog import _hydrate_tracks, get_album
         from .types import AlbumInclude
         album, _ = get_album(self.client, album_id,
                              include=(AlbumInclude.ITEMS, AlbumInclude.ARTISTS,
@@ -496,7 +511,7 @@ class Session:
 
     def get_playlist_tracks(self, uuid: str, limit: int = 0, offset: int = 0) -> list[Track]:
         """Get playlist tracks with artists+albums hydrated (2 calls)."""
-        from .api.catalog import get_playlist, _hydrate_tracks
+        from .api.catalog import _hydrate_tracks, get_playlist
         from .types import PlaylistInclude
         playlist, _ = get_playlist(self.client, uuid,
                                    include=(PlaylistInclude.ITEMS,))
@@ -593,10 +608,11 @@ class Session:
             raise NotFoundError(f"Mix {mix_id} not found or empty", status=404)
         header = page.categories[0]
         items_mod = page.categories[1]
-        if header.items and isinstance(header.items[0], Mix):
-            m = header.items[0]
-        else:
-            m = Mix({"id": mix_id}, self)
+        m = (
+            header.items[0]
+            if header.items and isinstance(header.items[0], Mix)
+            else Mix({"id": mix_id}, self)
+        )
         m._page_items = items_mod.items
         return m
 

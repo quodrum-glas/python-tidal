@@ -63,6 +63,7 @@ def _fetch_relationship(
     If *limit* > 0, stop after collecting that many items.
     """
     from functools import partial
+
     from ..utils import paginated_fetch
 
     all_items: list[Resource] = []

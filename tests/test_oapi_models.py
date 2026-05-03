@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from tidalapi.jsonapi import Document, Resource
-from tidalapi.models import Album, Artist, Model, Playlist, Track, Video, wrap
-from tidalapi.types import ResourceType
+from tidalapi.jsonapi import Document
+from tidalapi.models import Album, Artist, Model, Playlist, Track, wrap
 
 
 def _doc(data: dict, included: list | None = None) -> Document:

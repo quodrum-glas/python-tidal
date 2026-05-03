@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import json
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
-
-import pytest
 
 from tidalapi.auth import Auth, LinkLogin, _make_pkce
 from tidalapi.client import Client
@@ -14,7 +11,6 @@ from tidalapi.models_v1._base import _Model
 from tidalapi.models_v1.album import Album
 from tidalapi.models_v1.artist import Artist
 from tidalapi.models_v1.track import Track
-
 
 # -- _Model base -------------------------------------------------------------
 

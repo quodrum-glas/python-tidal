@@ -26,9 +26,10 @@ compatibility with mopidy-tidal.  OpenAPI models live in ``tidalapi.models``.
 
 __version__ = "0.1.0"
 
+# Stream
+from .api.stream import ManifestMimeType, ManifestType, Quality, StreamInfo
 from .auth import Auth, LinkLogin
 from .client import Client
-from .http import TidalRequestsSession
 from .exceptions import (
     AuthError,
     ManifestError,
@@ -39,7 +40,7 @@ from .exceptions import (
     TidalError,
     TooManyRequests,
 )
-from .session import Session
+from .http import TidalRequestsSession
 
 # v1 models as top-level names (mopidy-tidal compat: isinstance checks)
 from .models_v1 import (
@@ -53,9 +54,7 @@ from .models_v1 import (
     Track,
     Video,
 )
-
-# Stream
-from .api.stream import ManifestMimeType, ManifestType, Quality, StreamInfo
+from .session import Session
 
 __all__ = [
     "__version__",

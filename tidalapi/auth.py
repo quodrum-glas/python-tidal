@@ -9,10 +9,11 @@ import logging
 import os
 import random
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import requests

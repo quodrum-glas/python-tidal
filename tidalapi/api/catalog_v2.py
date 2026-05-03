@@ -6,7 +6,7 @@ Used for: search, suggestions, artist lookup, feed, my-collection.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ..models_v1 import Album, Artist, Playlist, Track, Video
 

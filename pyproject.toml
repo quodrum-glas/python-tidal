@@ -48,6 +48,7 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+per-file-ignores = {"tidalapi/mp4decrypt.py" = ["E402", "E702"]}
 
 [tool.ruff.lint.isort]
 known-first-party = ["tidalapi"]

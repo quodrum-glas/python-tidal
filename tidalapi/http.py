@@ -74,12 +74,12 @@ class TidalRequestsSession(requests.Session):
         adapter.poolmanager.connection_pool_kw["socket_options"] = self._KEEPALIVE_OPTS
 
     def _check_lifecycle(self) -> None:
-        if 0 < self.ttl:
+        if self.ttl > 0:
             now = time.monotonic()
             life = now - self._last_reset
-            if self.ttl < life:
+            if life > self.ttl:
                 idle = now - self._last_request
-                if self._IDLE < idle:
+                if idle > self._IDLE:
                     log.info("Resetting session (ttl %.0fs > %ds). Idle for %.0fs", life, self.ttl, idle)
                     self.reset()
 

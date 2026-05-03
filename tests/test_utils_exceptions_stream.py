@@ -5,6 +5,14 @@ import json
 
 import pytest
 
+from tidalapi.api.stream import (
+    BTSManifest,
+    ManifestMimeType,
+    ManifestType,
+    Quality,
+    StreamInfo,
+    _build_stream_info,
+)
 from tidalapi.exceptions import (
     AuthError,
     ManifestError,
@@ -15,16 +23,7 @@ from tidalapi.exceptions import (
     TidalError,
     TooManyRequests,
 )
-from tidalapi.api.stream import (
-    BTSManifest,
-    ManifestMimeType,
-    ManifestType,
-    Quality,
-    StreamInfo,
-    _build_stream_info,
-)
 from tidalapi.utils import chunked_fetch, lazy, paginated_fetch
-
 
 # -- lazy descriptor ----------------------------------------------------------
 

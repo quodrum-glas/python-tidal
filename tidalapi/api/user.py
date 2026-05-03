@@ -68,6 +68,7 @@ class UserCollection:
     ) -> tuple[list[Resource], Document]:
         """Get all items from user collection, auto-paginating."""
         from functools import partial
+
         from ..utils import paginated_fetch
 
         params = _params(

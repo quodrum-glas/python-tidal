@@ -134,7 +134,7 @@ class Document:
             return []
         return [
             (r, m)
-            for k, m in zip(src.rel_keys(name), src.rel_meta(name))
+            for k, m in zip(src.rel_keys(name), src.rel_meta(name), strict=True)
             if (r := self.resolve(k))
         ]
 

@@ -72,7 +72,6 @@ class Album(Model):
 
     @property
     def tracks(self) -> list[Track]:
-        from .track import Track
         return [
             _track_with_meta(r, meta, self._doc, self._client)
             for r, meta in self._doc.related_with_meta(AlbumRel.ITEMS, self._r)

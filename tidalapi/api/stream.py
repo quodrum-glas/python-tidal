@@ -172,7 +172,7 @@ def _build_stream_info(raw: dict, track_id: int) -> StreamInfo:
     try:
         manifest_text = base64.b64decode(manifest_b64).decode("utf-8")
     except Exception as e:
-        raise ManifestError(f"Failed to decode manifest: {e}")
+        raise ManifestError(f"Failed to decode manifest: {e}") from e
 
     mpd: MPEGDASH | None = None
     bts: BTSManifest | None = None

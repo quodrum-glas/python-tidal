@@ -1,17 +1,12 @@
 from __future__ import annotations
 
-import pytest
-
 from tidalapi.jsonapi import Document, Resource, _parse_resource
 from tidalapi.types import (
-    AlbumInclude,
     AlbumRel,
-    ArtistRel,
     ResourceType,
     TrackRel,
     parse_iso_duration,
 )
-
 
 # -- parse_iso_duration -------------------------------------------------------
 
