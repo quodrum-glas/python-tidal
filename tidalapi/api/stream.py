@@ -38,10 +38,13 @@ ManifestMimeType = ManifestType
 
 class BTSManifest:
     """Parsed BTS manifest."""
+
     def __init__(self, data: dict):
         self._data = data
+
     def get_codecs(self) -> str:
         return self._data.get("codecs", "")
+
     def get_urls(self) -> list[str]:
         return self._data.get("urls", [])
 
@@ -91,14 +94,18 @@ _WIDEVINE_URN = "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def get_stream_v1(client: Client, track_id: int, quality: Quality | str = Quality.HIGH) -> StreamInfo:
     """Fetch playback info and parse the manifest into a StreamInfo."""
     q = quality.value if isinstance(quality, Quality) else quality
-    raw = client.v1(f"tracks/{track_id}/playbackinfopostpaywall", {
-        "playbackmode": "STREAM",
-        "audioquality": q,
-        "assetpresentation": "FULL",
-    })
+    raw = client.v1(
+        f"tracks/{track_id}/playbackinfopostpaywall",
+        {
+            "playbackmode": "STREAM",
+            "audioquality": q,
+            "assetpresentation": "FULL",
+        },
+    )
     return _build_stream_info(raw, track_id)
 
 
@@ -164,6 +171,7 @@ def get_stream_oapi(
     }
     return _build_stream_info(raw, track_id)
 
+
 def _build_stream_info(raw: dict, track_id: int) -> StreamInfo:
     """Parse a playbackinfo response dict into a StreamInfo."""
     manifest_b64 = raw.get("manifest", "")
@@ -214,7 +222,8 @@ _CERT_REQUEST = bytes([0x08, 0x04])
 def fetch_service_certificate(client: Client, license_url: str) -> bytes:
     """Fetch the Widevine service certificate from the license server."""
     resp = client.request(
-        "POST", license_url,
+        "POST",
+        license_url,
         data=_CERT_REQUEST,
         headers={"Content-Type": "application/octet-stream"},
     )
@@ -239,17 +248,14 @@ def get_decryption_keys(
         challenge = cdm.get_license_challenge(session_id, PSSH(stream.init_data[0]))
 
         resp = client.request(
-            "POST", stream.license_url,
+            "POST",
+            stream.license_url,
             data=challenge,
             headers={"Content-Type": "application/octet-stream"},
         )
 
         cdm.parse_license(session_id, resp.content)
-        return [
-            (key.kid.hex, key.key.hex())
-            for key in cdm.get_keys(session_id)
-            if key.type == "CONTENT"
-        ]
+        return [(key.kid.hex, key.key.hex()) for key in cdm.get_keys(session_id) if key.type == "CONTENT"]
     finally:
         cdm.close(session_id)
 
@@ -258,13 +264,17 @@ def get_decryption_keys(
 # Video
 # ---------------------------------------------------------------------------
 
+
 def get_video_url(client: Client, video_id: int, quality: str = "HIGH") -> str:
     """Get the HLS playlist URL for a video."""
-    raw = client.v1(f"videos/{video_id}/urlpostpaywall", {
-        "urlusagemode": "STREAM",
-        "videoquality": quality,
-        "assetpresentation": "FULL",
-    })
+    raw = client.v1(
+        f"videos/{video_id}/urlpostpaywall",
+        {
+            "urlusagemode": "STREAM",
+            "videoquality": quality,
+            "assetpresentation": "FULL",
+        },
+    )
     urls = raw.get("urls", [])
     if not urls:
         raise StreamError("No video URL returned")

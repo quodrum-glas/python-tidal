@@ -12,10 +12,26 @@ if TYPE_CHECKING:
 
 class Track(_Model):
     __slots__ = (
-        "id", "title", "name", "duration", "artist", "artists", "album",
-        "track_num", "volume_num", "explicit", "isrc", "audio_quality",
-        "audio_modes", "popularity", "replay_gain", "peak", "mixes",
-        "version", "full_name", "media_tags",
+        "id",
+        "title",
+        "name",
+        "duration",
+        "artist",
+        "artists",
+        "album",
+        "track_num",
+        "volume_num",
+        "explicit",
+        "isrc",
+        "audio_quality",
+        "audio_modes",
+        "popularity",
+        "replay_gain",
+        "peak",
+        "mixes",
+        "version",
+        "full_name",
+        "media_tags",
     )
 
     def __init__(self, raw: dict[str, Any], session: Session):
@@ -43,8 +59,8 @@ class Track(_Model):
 
         artists_raw = raw.get("artists") or []
         self.artists: list[Artist] = [_Artist(a, session) for a in artists_raw]
-        self.artist: Artist | None = self.artists[0] if self.artists else (
-            _Artist(raw["artist"], session) if raw.get("artist") else None
+        self.artist: Artist | None = (
+            self.artists[0] if self.artists else (_Artist(raw["artist"], session) if raw.get("artist") else None)
         )
 
         album_raw = raw.get("album")
@@ -52,6 +68,7 @@ class Track(_Model):
 
     def get_stream(self):
         from ..stream import get_stream
+
         return get_stream(self._session.client, self.id)
 
     def lyrics(self):
@@ -60,11 +77,7 @@ class Track(_Model):
     def credits(self) -> list[dict]:
         """Track credits (composer, producer, etc.) via OpenAPI v2."""
         r = self._session.client.oapi(f"tracks/{self.id}", {"include": "credits"})
-        return [
-            inc["attributes"]
-            for inc in r.get("included", [])
-            if inc.get("type") == "credits"
-        ]
+        return [inc["attributes"] for inc in r.get("included", []) if inc.get("type") == "credits"]
 
     @property
     def similar_tracks(self) -> list[Track]:

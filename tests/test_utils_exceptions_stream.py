@@ -5,14 +5,7 @@ import json
 
 import pytest
 
-from tidalapi.api.stream import (
-    BTSManifest,
-    ManifestMimeType,
-    ManifestType,
-    Quality,
-    StreamInfo,
-    _build_stream_info,
-)
+from tidalapi.api.stream import BTSManifest, ManifestMimeType, ManifestType, Quality, StreamInfo, _build_stream_info
 from tidalapi.exceptions import (
     AuthError,
     ManifestError,
@@ -178,13 +171,13 @@ class TestManifestType:
 
 class TestStreamInfo:
     def test_is_bts(self):
-        info = StreamInfo(track_id=1, manifest_mime_type=ManifestType.BTS.value,
-                          bts=BTSManifest({}))
+        info = StreamInfo(track_id=1, manifest_mime_type=ManifestType.BTS.value, bts=BTSManifest({}))
         assert info.is_bts
         assert not info.is_mpd
 
     def test_is_mpd(self):
         from mpegdash.parser import MPEGDASHParser
+
         mpd = MPEGDASHParser.parse(_MINIMAL_MPD)
         info = StreamInfo(track_id=2, manifest_mime_type=ManifestType.MPD.value, mpd=mpd)
         assert info.is_mpd
@@ -193,8 +186,7 @@ class TestStreamInfo:
     def test_is_drm(self):
         info = StreamInfo(track_id=1, manifest_mime_type=ManifestType.BTS.value)
         assert not info.is_drm
-        info = StreamInfo(track_id=1, manifest_mime_type=ManifestType.BTS.value,
-                          drm_system="WIDEVINE")
+        info = StreamInfo(track_id=1, manifest_mime_type=ManifestType.BTS.value, drm_system="WIDEVINE")
         assert info.is_drm
 
 
@@ -262,19 +254,11 @@ class TestBuildStreamInfo:
         assert info.mpd is not None
 
     def test_unknown_manifest_raises(self):
-        raw = {
-            "trackId": 3,
-            "manifestMimeType": "application/unknown",
-            "manifest": base64.b64encode(b"data").decode(),
-        }
+        raw = {"trackId": 3, "manifestMimeType": "application/unknown", "manifest": base64.b64encode(b"data").decode()}
         with pytest.raises(ManifestError, match="Unknown manifest type"):
             _build_stream_info(raw, 3)
 
     def test_bad_base64_raises(self):
-        raw = {
-            "trackId": 4,
-            "manifestMimeType": ManifestType.BTS.value,
-            "manifest": "not-valid-base64!!!",
-        }
+        raw = {"trackId": 4, "manifestMimeType": ManifestType.BTS.value, "manifest": "not-valid-base64!!!"}
         with pytest.raises(ManifestError, match="Failed to decode"):
             _build_stream_info(raw, 4)

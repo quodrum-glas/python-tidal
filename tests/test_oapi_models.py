@@ -227,10 +227,7 @@ class TestOapiPlaylist:
 
     def test_tracks_filters_non_tracks(self):
         p = self._make(
-            rels={"items": {"data": [
-                {"type": "tracks", "id": "1"},
-                {"type": "videos", "id": "2"},
-            ]}},
+            rels={"items": {"data": [{"type": "tracks", "id": "1"}, {"type": "videos", "id": "2"}]}},
             included=[
                 {"type": "tracks", "id": "1", "attributes": {"title": "Song"}},
                 {"type": "videos", "id": "2", "attributes": {"title": "Video"}},

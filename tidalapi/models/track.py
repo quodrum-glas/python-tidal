@@ -75,6 +75,7 @@ class Track(Model):
     @property
     def artists(self) -> list[Artist]:
         from .artist import Artist
+
         return [Artist(r, self._doc, self._client) for r in self._doc.related(TrackRel.ARTISTS, self._r)]
 
     @property
@@ -85,6 +86,7 @@ class Track(Model):
     @property
     def albums(self) -> list[Album]:
         from .album import Album
+
         return [Album(r, self._doc, self._client) for r in self._doc.related(TrackRel.ALBUMS, self._r)]
 
     @property
@@ -97,6 +99,7 @@ class Track(Model):
         result = [Track(r, self._doc, self._client) for r in self._doc.related(TrackRel.SIMILAR_TRACKS, self._r)]
         if not result:
             from ..api.catalog import get_similar_tracks
+
             result, _ = get_similar_tracks(self._client, self.id)
         return result
 

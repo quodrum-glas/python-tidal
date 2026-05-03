@@ -9,8 +9,7 @@ if TYPE_CHECKING:
 class Genre:
     """A TIDAL genre with navigable .items()."""
 
-    __slots__ = ("name", "path", "image", "playlists", "artists",
-                 "albums", "tracks", "videos", "_session", "raw")
+    __slots__ = ("name", "path", "image", "playlists", "artists", "albums", "tracks", "videos", "_session", "raw")
 
     def __init__(self, raw: dict, session: Session):
         self.raw = raw
@@ -23,10 +22,7 @@ class Genre:
         self.tracks: bool = raw.get("hasTracks", False)
         self.videos: bool = raw.get("hasVideos", False)
         img = raw.get("image", "")
-        self.image: str = (
-            f"https://resources.tidal.com/images/{img.replace('-', '/')}/460x306.jpg"
-            if img else ""
-        )
+        self.image: str = f"https://resources.tidal.com/images/{img.replace('-', '/')}/460x306.jpg" if img else ""
 
     def items(self, model_class=None) -> list:
         from .album import Album

@@ -33,6 +33,7 @@ class Video(Model):
     @property
     def artists(self) -> list[Artist]:
         from .artist import Artist
+
         return [Artist(r, self._doc, self._client) for r in self._doc.related(VideoRel.ARTISTS, self._r)]
 
     @property

@@ -43,6 +43,7 @@ class Mix(_Model):
             return self._page_items
         # Fetch via pages/mix
         from .page import get_page
+
         c = self._session.client
         page = get_page(c, "mix", _session=self._session, mixId=self.id)
         if len(page.categories) >= 2:

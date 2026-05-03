@@ -1,12 +1,7 @@
 from __future__ import annotations
 
 from tidalapi.jsonapi import Document, Resource, _parse_resource
-from tidalapi.types import (
-    AlbumRel,
-    ResourceType,
-    TrackRel,
-    parse_iso_duration,
-)
+from tidalapi.types import AlbumRel, ResourceType, TrackRel, parse_iso_duration
 
 # -- parse_iso_duration -------------------------------------------------------
 
@@ -64,18 +59,15 @@ class TestResource:
 
     def test_rel_keys_single(self):
         r = Resource(
-            type=ResourceType.TRACKS, id="1",
-            relationships={"albums": {"data": {"type": "albums", "id": "10"}}},
+            type=ResourceType.TRACKS, id="1", relationships={"albums": {"data": {"type": "albums", "id": "10"}}}
         )
         assert r.rel_keys("albums") == [("albums", "10")]
 
     def test_rel_keys_list(self):
         r = Resource(
-            type=ResourceType.ALBUMS, id="1",
-            relationships={"items": {"data": [
-                {"type": "tracks", "id": "1"},
-                {"type": "tracks", "id": "2"},
-            ]}},
+            type=ResourceType.ALBUMS,
+            id="1",
+            relationships={"items": {"data": [{"type": "tracks", "id": "1"}, {"type": "tracks", "id": "2"}]}},
         )
         assert r.rel_keys("items") == [("tracks", "1"), ("tracks", "2")]
 
@@ -84,26 +76,27 @@ class TestResource:
         assert r.rel_keys("nonexistent") == []
 
     def test_rel_keys_none_data(self):
-        r = Resource(
-            type=ResourceType.TRACKS, id="1",
-            relationships={"albums": {"data": None}},
-        )
+        r = Resource(type=ResourceType.TRACKS, id="1", relationships={"albums": {"data": None}})
         assert r.rel_keys("albums") == []
 
     def test_rel_keys_with_enum(self):
         r = Resource(
-            type=ResourceType.TRACKS, id="1",
-            relationships={"albums": {"data": {"type": "albums", "id": "5"}}},
+            type=ResourceType.TRACKS, id="1", relationships={"albums": {"data": {"type": "albums", "id": "5"}}}
         )
         assert r.rel_keys(TrackRel.ALBUMS) == [("albums", "5")]
 
     def test_rel_meta(self):
         r = Resource(
-            type=ResourceType.ALBUMS, id="1",
-            relationships={"items": {"data": [
-                {"type": "tracks", "id": "1", "meta": {"trackNumber": 1}},
-                {"type": "tracks", "id": "2", "meta": {"trackNumber": 2}},
-            ]}},
+            type=ResourceType.ALBUMS,
+            id="1",
+            relationships={
+                "items": {
+                    "data": [
+                        {"type": "tracks", "id": "1", "meta": {"trackNumber": 1}},
+                        {"type": "tracks", "id": "2", "meta": {"trackNumber": 2}},
+                    ]
+                }
+            },
         )
         metas = r.rel_meta("items")
         assert metas == [{"trackNumber": 1}, {"trackNumber": 2}]
@@ -135,10 +128,12 @@ class TestDocument:
         assert doc.primary.attributes["title"] == "Song"
 
     def test_list_primary(self):
-        raw = {"data": [
-            {"type": "tracks", "id": "1", "attributes": {"title": "A"}},
-            {"type": "tracks", "id": "2", "attributes": {"title": "B"}},
-        ]}
+        raw = {
+            "data": [
+                {"type": "tracks", "id": "1", "attributes": {"title": "A"}},
+                {"type": "tracks", "id": "2", "attributes": {"title": "B"}},
+            ]
+        }
         doc = Document(raw)
         assert len(doc.primary) == 2
 
@@ -148,11 +143,12 @@ class TestDocument:
 
     def test_included_resources(self):
         raw = {
-            "data": {"type": "albums", "id": "10",
-                     "relationships": {"artists": {"data": [{"type": "artists", "id": "5"}]}}},
-            "included": [
-                {"type": "artists", "id": "5", "attributes": {"name": "Radiohead"}},
-            ],
+            "data": {
+                "type": "albums",
+                "id": "10",
+                "relationships": {"artists": {"data": [{"type": "artists", "id": "5"}]}},
+            },
+            "included": [{"type": "artists", "id": "5", "attributes": {"name": "Radiohead"}}],
         }
         doc = Document(raw)
         artist = doc.resolve(("artists", "5"))
@@ -161,11 +157,12 @@ class TestDocument:
 
     def test_related(self):
         raw = {
-            "data": {"type": "albums", "id": "10",
-                     "relationships": {"artists": {"data": [{"type": "artists", "id": "5"}]}}},
-            "included": [
-                {"type": "artists", "id": "5", "attributes": {"name": "Radiohead"}},
-            ],
+            "data": {
+                "type": "albums",
+                "id": "10",
+                "relationships": {"artists": {"data": [{"type": "artists", "id": "5"}]}},
+            },
+            "included": [{"type": "artists", "id": "5", "attributes": {"name": "Radiohead"}}],
         }
         doc = Document(raw)
         artists = doc.related(AlbumRel.ARTISTS)
@@ -174,13 +171,12 @@ class TestDocument:
 
     def test_related_with_meta(self):
         raw = {
-            "data": {"type": "albums", "id": "10",
-                     "relationships": {"items": {"data": [
-                         {"type": "tracks", "id": "1", "meta": {"trackNumber": 1}},
-                     ]}}},
-            "included": [
-                {"type": "tracks", "id": "1", "attributes": {"title": "Song"}},
-            ],
+            "data": {
+                "type": "albums",
+                "id": "10",
+                "relationships": {"items": {"data": [{"type": "tracks", "id": "1", "meta": {"trackNumber": 1}}]}},
+            },
+            "included": [{"type": "tracks", "id": "1", "attributes": {"title": "Song"}}],
         }
         doc = Document(raw)
         items = doc.related_with_meta(AlbumRel.ITEMS)
@@ -203,16 +199,17 @@ class TestDocument:
         assert len(tracks) == 2
 
     def test_merge(self):
-        doc1 = Document({
-            "data": {"type": "albums", "id": "1", "relationships": {}},
-        })
-        doc2 = Document({
-            "data": {"type": "albums", "id": "1",
-                     "relationships": {"artists": {"data": [{"type": "artists", "id": "5"}]}}},
-            "included": [
-                {"type": "artists", "id": "5", "attributes": {"name": "X"}},
-            ],
-        })
+        doc1 = Document({"data": {"type": "albums", "id": "1", "relationships": {}}})
+        doc2 = Document(
+            {
+                "data": {
+                    "type": "albums",
+                    "id": "1",
+                    "relationships": {"artists": {"data": [{"type": "artists", "id": "5"}]}},
+                },
+                "included": [{"type": "artists", "id": "5", "attributes": {"name": "X"}}],
+            }
+        )
         doc1.merge(doc2, target=doc1.primary)
         assert ("artists", "5") in doc1.resources
         assert "artists" in doc1.primary.relationships
@@ -222,11 +219,9 @@ class TestDocument:
         the full resource should be kept."""
         raw = {
             "data": [
-                {"type": "tracks", "id": "1"},  # bare identifier
+                {"type": "tracks", "id": "1"}  # bare identifier
             ],
-            "included": [
-                {"type": "tracks", "id": "1", "attributes": {"title": "Full Track"}},
-            ],
+            "included": [{"type": "tracks", "id": "1", "attributes": {"title": "Full Track"}}],
         }
         doc = Document(raw)
         # The primary should reference the full included resource

@@ -12,8 +12,16 @@ if TYPE_CHECKING:
 
 class Video(_Model):
     __slots__ = (
-        "id", "title", "name", "duration", "artist", "artists",
-        "album", "image_id", "quality", "explicit",
+        "id",
+        "title",
+        "name",
+        "duration",
+        "artist",
+        "artists",
+        "album",
+        "image_id",
+        "quality",
+        "explicit",
     )
 
     def __init__(self, raw: dict[str, Any], session: Session):
@@ -31,14 +39,15 @@ class Video(_Model):
 
         artists_raw = raw.get("artists") or []
         self.artists: list[Artist] = [_Artist(a, session) for a in artists_raw]
-        self.artist: Artist | None = self.artists[0] if self.artists else (
-            _Artist(raw["artist"], session) if raw.get("artist") else None
+        self.artist: Artist | None = (
+            self.artists[0] if self.artists else (_Artist(raw["artist"], session) if raw.get("artist") else None)
         )
         album_raw = raw.get("album")
         self.album: Album | None = _Album(album_raw, session) if album_raw else None
 
     def get_url(self, quality: str = "HIGH") -> str:
         from ..stream import get_video_url
+
         return get_video_url(self._session.client, self.id, quality)
 
     def image(self, w: int = 750, h: int = 500) -> str:

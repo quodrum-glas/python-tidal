@@ -6,7 +6,6 @@ build-backend = "hatchling.build"
 name = "tidalapi"
 version = "0.1.0"
 description = "Clean Python client for the TIDAL music streaming API"
-readme = "README.md"
 license = "LGPL-3.0-or-later"
 requires-python = ">= 3.10"
 authors = [{ name = "quodrum-glas" }]
@@ -48,11 +47,16 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
-per-file-ignores = {"tidalapi/mp4decrypt.py" = ["E402", "E702"]}
+ignore = ["E402", "SIM105"]
+per-file-ignores = {"tidalapi/mp4decrypt.py" = ["E702"]}
+
+[tool.ruff.format]
+skip-magic-trailing-comma = true
 
 [tool.ruff.lint.isort]
 known-first-party = ["tidalapi"]
 force-single-line = false
+split-on-trailing-comma = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

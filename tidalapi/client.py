@@ -33,6 +33,7 @@ _RETRY_STATUSES = {429, 500, 502, 503, 504}
 
 def _throttle(fn):
     """Enforce minimum gap between requests. Reads _gap/_last_ts from self."""
+
     @wraps(fn)
     def wrapper(self, *args, **kwargs):
         elapsed = time.monotonic() - self._last_ts
@@ -42,6 +43,7 @@ def _throttle(fn):
             time.sleep(wait)
         self._last_ts = time.monotonic()
         return fn(self, *args, **kwargs)
+
     return wrapper
 
 
@@ -66,8 +68,7 @@ class Client:
     on first use — no need to pass them in.
     """
 
-    def __init__(self, auth: Auth, http_timeout: tuple[float, float],
-                 min_request_gap: float = 0.05):
+    def __init__(self, auth: Auth, http_timeout: tuple[float, float], min_request_gap: float = 0.05):
         self.auth = auth
         self.http = TidalRequestsSession(
             timeout=http_timeout,
@@ -139,8 +140,7 @@ class Client:
 
     def post_form(self, path: str, data: dict) -> bool:
         """POST form-encoded data to v1 endpoint, return success bool."""
-        resp = self.request("POST", f"{BASE_V1}{path}",
-                            data=data, params={"countryCode": self.country_code})
+        resp = self.request("POST", f"{BASE_V1}{path}", data=data, params={"countryCode": self.country_code})
         return resp.ok
 
     # -- convenience for the three API surfaces ---------------------------

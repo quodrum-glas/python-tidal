@@ -48,7 +48,7 @@ def chunked_fetch(
             ...
     """
     for i in range(0, len(ids), chunk_size):
-        yield fn(ids[i:i + chunk_size])
+        yield fn(ids[i : i + chunk_size])
 
 
 def paginated_fetch(

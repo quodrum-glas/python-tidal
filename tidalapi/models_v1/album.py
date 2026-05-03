@@ -12,9 +12,21 @@ if TYPE_CHECKING:
 
 class Album(_Model):
     __slots__ = (
-        "id", "title", "name", "num_tracks", "num_volumes", "duration",
-        "explicit", "release_date", "tidal_release_date", "cover_id",
-        "artist", "artists", "audio_quality", "popularity", "type",
+        "id",
+        "title",
+        "name",
+        "num_tracks",
+        "num_volumes",
+        "duration",
+        "explicit",
+        "release_date",
+        "tidal_release_date",
+        "cover_id",
+        "artist",
+        "artists",
+        "audio_quality",
+        "popularity",
+        "type",
         "audio_modes",
     )
 
@@ -41,9 +53,7 @@ class Album(_Model):
         self.artists: list[Artist] = [_Artist(a, session) for a in artists_raw]
         artist_raw = raw.get("artist")
         self.artist: Artist | None = (
-            self.artists[0] if self.artists
-            else _Artist(artist_raw, session) if artist_raw
-            else None
+            self.artists[0] if self.artists else _Artist(artist_raw, session) if artist_raw else None
         )
 
     def get_tracks(self, limit: int = 100) -> list[Track]:
@@ -72,7 +82,7 @@ class Album(_Model):
             return []
 
     # -- Compatibility methods for oapi interface --
-    
+
     def cover(self, size: int = 640) -> str:
         """Compatibility with oapi Album.cover()"""
         return self.image(size)

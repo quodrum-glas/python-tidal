@@ -33,6 +33,7 @@ class ResourceType(str, Enum):
 
 # -- per-resource include enums -------------------------------------------
 
+
 class AlbumInclude(str, Enum):
     ITEMS = "items"
     ARTISTS = "artists"
@@ -77,6 +78,7 @@ class VideoInclude(str, Enum):
 
 # -- relationship name enums (for Document.related()) ---------------------
 
+
 class AlbumRel(str, Enum):
     ITEMS = "items"
     ARTISTS = "artists"
@@ -120,6 +122,7 @@ class VideoRel(str, Enum):
 
 
 # -- duration helper ------------------------------------------------------
+
 
 def parse_iso_duration(s: str) -> int:
     """Parse ISO 8601 duration (e.g. 'PT4M36S') to seconds."""

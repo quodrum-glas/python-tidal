@@ -118,10 +118,17 @@ class Favorites:
         return resp is not None
 
     def playlists(self, limit: int = 50, offset: int = 0) -> list[Playlist]:
-        raw = self._c.v2("my-collection/playlists/folders", {
-            "folderId": "root", "limit": limit, "offset": offset,
-            "includeOnly": "PLAYLIST", "order": "DATE", "orderDirection": "DESC",
-        })
+        raw = self._c.v2(
+            "my-collection/playlists/folders",
+            {
+                "folderId": "root",
+                "limit": limit,
+                "offset": offset,
+                "includeOnly": "PLAYLIST",
+                "order": "DATE",
+                "orderDirection": "DESC",
+            },
+        )
         return [Playlist(i.get("data", i), self._s) for i in raw.get("items", [])]
 
     def playlists_paginated(self) -> list[Playlist]:
@@ -136,35 +143,41 @@ class PlaylistFolders:
         self._s = session
 
     def list(
-        self, folder_id: str = "root", limit: int = 50, offset: int = 0,
-        order: str = "DATE", direction: str = "DESC",
+        self,
+        folder_id: str = "root",
+        limit: int = 50,
+        offset: int = 0,
+        order: str = "DATE",
+        direction: str = "DESC",
     ) -> list[dict[str, Any]]:
-        raw = self._c.v2("my-collection/playlists/folders", {
-            "folderId": folder_id, "limit": limit, "offset": offset,
-            "order": order, "orderDirection": direction,
-        })
+        raw = self._c.v2(
+            "my-collection/playlists/folders",
+            {
+                "folderId": folder_id,
+                "limit": limit,
+                "offset": offset,
+                "order": order,
+                "orderDirection": direction,
+            },
+        )
         return raw.get("items", [])
 
     def playlists(self, folder_id: str = "root", limit: int = 50) -> list[Playlist]:
         items = self.list(folder_id, limit=limit)
-        return [
-            Playlist(i["data"], self._s)
-            for i in items
-            if i.get("itemType") == "PLAYLIST"
-        ]
+        return [Playlist(i["data"], self._s) for i in items if i.get("itemType") == "PLAYLIST"]
 
     def create_playlist(self, name: str, description: str = "", folder_id: str = "root") -> dict:
-        return self._c.v2("my-collection/playlists/folders/create-playlist", {
-            "name": name, "description": description, "folderId": folder_id
-        }, method="PUT")
+        return self._c.v2(
+            "my-collection/playlists/folders/create-playlist",
+            {"name": name, "description": description, "folderId": folder_id},
+            method="PUT",
+        )
 
     def create_folder(self, name: str, folder_id: str = "root") -> dict:
-        return self._c.v2("my-collection/playlists/folders/create-folder", {
-            "name": name, "folderId": folder_id
-        }, method="PUT")
+        return self._c.v2(
+            "my-collection/playlists/folders/create-folder", {"name": name, "folderId": folder_id}, method="PUT"
+        )
 
     def remove(self, trns: list[str]) -> bool:
-        resp = self._c.v2("my-collection/playlists/folders/remove", {
-            "trns": ",".join(trns)
-        }, method="PUT")
+        resp = self._c.v2("my-collection/playlists/folders/remove", {"trns": ",".join(trns)}, method="PUT")
         return resp is not None

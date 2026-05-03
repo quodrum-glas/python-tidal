@@ -153,9 +153,7 @@ class UserTracks(UserCollection):
         )
         return [Track(r, doc, self._client) for r in items], doc
 
-    def add_track(
-        self, track_id: int | str, user_id: str = "me", *, country_code: str | None = None
-    ) -> None:
+    def add_track(self, track_id: int | str, user_id: str = "me", *, country_code: str | None = None) -> None:
         self.add_items("tracks", [track_id], user_id, country_code=country_code)
 
     def remove_track(self, track_id: int | str, user_id: str = "me") -> None:
@@ -187,9 +185,7 @@ class UserAlbums(UserCollection):
         )
         return [Album(r, doc, self._client) for r in items], doc
 
-    def add_album(
-        self, album_id: int | str, user_id: str = "me", *, country_code: str | None = None
-    ) -> None:
+    def add_album(self, album_id: int | str, user_id: str = "me", *, country_code: str | None = None) -> None:
         self.add_items("albums", [album_id], user_id, country_code=country_code)
 
     def remove_album(self, album_id: int | str, user_id: str = "me") -> None:
@@ -221,9 +217,7 @@ class UserArtists(UserCollection):
         )
         return [Artist(r, doc, self._client) for r in items], doc
 
-    def add_artist(
-        self, artist_id: int | str, user_id: str = "me", *, country_code: str | None = None
-    ) -> None:
+    def add_artist(self, artist_id: int | str, user_id: str = "me", *, country_code: str | None = None) -> None:
         self.add_items("artists", [artist_id], user_id, country_code=country_code)
 
     def remove_artist(self, artist_id: int | str, user_id: str = "me") -> None:
@@ -279,9 +273,7 @@ class UserVideos(UserCollection):
         )
         return [Video(r, doc, self._client) for r in items], doc
 
-    def add_video(
-        self, video_id: int | str, user_id: str = "me", *, country_code: str | None = None
-    ) -> None:
+    def add_video(self, video_id: int | str, user_id: str = "me", *, country_code: str | None = None) -> None:
         self.add_items("videos", [video_id], user_id, country_code=country_code)
 
     def remove_video(self, video_id: int | str, user_id: str = "me") -> None:

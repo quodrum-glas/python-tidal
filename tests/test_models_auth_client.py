@@ -61,9 +61,15 @@ class TestArtist:
 
 
 _ALBUM_RAW = {
-    "id": 200, "title": "OK Computer", "numberOfTracks": 12, "numberOfVolumes": 1,
-    "duration": 3200, "releaseDate": "1997-06-16", "cover": "aa-bb-cc",
-    "audioQuality": "LOSSLESS", "artists": [_ARTIST_RAW],
+    "id": 200,
+    "title": "OK Computer",
+    "numberOfTracks": 12,
+    "numberOfVolumes": 1,
+    "duration": 3200,
+    "releaseDate": "1997-06-16",
+    "cover": "aa-bb-cc",
+    "audioQuality": "LOSSLESS",
+    "artists": [_ARTIST_RAW],
 }
 
 
@@ -95,9 +101,14 @@ class TestAlbum:
 
 
 _TRACK_RAW = {
-    "id": 300, "title": "Paranoid Android", "duration": 384,
-    "trackNumber": 2, "volumeNumber": 1, "audioQuality": "LOSSLESS",
-    "artists": [_ARTIST_RAW], "album": _ALBUM_RAW,
+    "id": 300,
+    "title": "Paranoid Android",
+    "duration": 384,
+    "trackNumber": 2,
+    "volumeNumber": 1,
+    "audioQuality": "LOSSLESS",
+    "artists": [_ARTIST_RAW],
+    "album": _ALBUM_RAW,
     "mediaMetadata": {"tags": ["LOSSLESS", "HIRES_LOSSLESS"]},
 }
 
@@ -157,9 +168,12 @@ class TestPkce:
 class TestAuth:
     def _auth(self, **kw) -> Auth:
         defaults = dict(
-            token_type="Bearer", access_token="tok", refresh_token="ref",
+            token_type="Bearer",
+            access_token="tok",
+            refresh_token="ref",
             expiry_time=datetime.now() + timedelta(hours=1),
-            client_id="cid", client_secret="csec",
+            client_id="cid",
+            client_secret="csec",
         )
         defaults.update(kw)
         return Auth(**defaults)

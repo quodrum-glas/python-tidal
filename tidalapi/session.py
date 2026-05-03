@@ -93,7 +93,9 @@ class _UserProxy:
         raw = self._s.client.put(
             "https://api.tidal.com/v2/my-collection/playlists/folders/create-playlist",
             params={
-                "name": name, "description": description, "folderId": "root",
+                "name": name,
+                "description": description,
+                "folderId": "root",
                 "countryCode": self._s.client.country_code,
             },
         ).json()
@@ -155,6 +157,7 @@ class Session:
         if not self.widevine_cdm_path:
             return None
         from pywidevine import Cdm, Device
+
         cdm = Cdm.from_device(Device.load(Path(self.widevine_cdm_path)))
         log.debug("Widevine CDM loaded")
         return cdm
@@ -259,6 +262,7 @@ class Session:
         remaining = link.expires_in
         while remaining > 0:
             import time
+
             time.sleep(link.interval)
             remaining -= link.interval
             if self.auth.check_device_login(link):
@@ -320,31 +324,37 @@ class Session:
 
     def get_track(self, track_id: int) -> Track:
         from .api.catalog import get_track
+
         t, _ = get_track(self.client, track_id)
         return t
 
     def get_album(self, album_id: int) -> Album:
         from .api.catalog import get_album
+
         a, _ = get_album(self.client, album_id)
         return a
 
     def get_artist(self, artist_id: int) -> Artist:
         from .api.catalog import get_artist
+
         a, _ = get_artist(self.client, artist_id)
         return a
 
     def get_playlist(self, uuid: str) -> Playlist:
         from .api.catalog import get_playlist
+
         p, _ = get_playlist(self.client, uuid)
         return p
 
     def get_video(self, video_id: int) -> Video:
         from .api.catalog import get_video
+
         v, _ = get_video(self.client, video_id)
         return v
 
     def search(self, query: str, **kw):
         from .api.catalog import search
+
         return search(self.client, query, **kw)
 
     def track(self, track_id) -> Track:
@@ -359,6 +369,7 @@ class Session:
     def playlist(self, uuid=None) -> Playlist:
         if uuid is None:
             from .jsonapi import Document, Resource
+
             r = Resource(type="playlists", id="", attributes={})
             return Playlist(r, Document({"data": None}))
         return self.get_playlist(str(uuid))
@@ -371,66 +382,77 @@ class Session:
     def get_albums(self, album_ids: list = None, **kwargs) -> list[Album]:
         """Get multiple albums with filtering options."""
         from .api.catalog import get_albums
+
         albums, _ = get_albums(self.client, album_ids=album_ids, **kwargs)
         return albums
 
     def get_artists(self, artist_ids: list = None, **kwargs) -> list[Artist]:
         """Get multiple artists with filtering options."""
         from .api.catalog import get_artists
+
         artists, _ = get_artists(self.client, artist_ids=artist_ids, **kwargs)
         return artists
 
     def get_tracks(self, track_ids: list = None, **kwargs) -> list[Track]:
         """Get multiple tracks with filtering options."""
         from .api.catalog import get_tracks
+
         tracks, _ = get_tracks(self.client, track_ids=track_ids, **kwargs)
         return tracks
 
     def get_playlists(self, playlist_ids: list = None, **kwargs) -> list[Playlist]:
         """Get multiple playlists with filtering options."""
         from .api.catalog import get_playlists
+
         playlists, _ = get_playlists(self.client, playlist_ids=playlist_ids, **kwargs)
         return playlists
 
     def get_videos(self, video_ids: list = None, **kwargs) -> list[Video]:
         """Get multiple videos with filtering options."""
         from .api.catalog import get_videos
+
         videos, _ = get_videos(self.client, video_ids=video_ids, **kwargs)
         return videos
 
     def search_albums(self, query: str, **kwargs) -> list[Album]:
         """Search specifically for albums."""
         from .api.catalog import search_albums
+
         albums, _ = search_albums(self.client, query, **kwargs)
         return albums
 
     def search_artists(self, query: str, **kwargs) -> list[Artist]:
         """Search specifically for artists."""
         from .api.catalog import search_artists
+
         artists, _ = search_artists(self.client, query, **kwargs)
         return artists
 
     def search_tracks(self, query: str, **kwargs) -> list[Track]:
         """Search specifically for tracks."""
         from .api.catalog import search_tracks
+
         tracks, _ = search_tracks(self.client, query, **kwargs)
         return tracks
 
     def search_playlists(self, query: str, **kwargs) -> list[Playlist]:
         """Search specifically for playlists."""
         from .api.catalog import search_playlists
+
         playlists, _ = search_playlists(self.client, query, **kwargs)
         return playlists
 
     def search_videos(self, query: str, **kwargs) -> list[Video]:
         """Search specifically for videos."""
         from .api.catalog import search_videos
+
         videos, _ = search_videos(self.client, query, **kwargs)
         return videos
 
     def search_suggestions(self, query: str, **kwargs):
         """Get search suggestions for a query."""
         from .api.catalog import search_suggestions
+
         return search_suggestions(self.client, query, **kwargs)
 
     # ── User collections using oapi ──────────────────────────────────────
@@ -438,47 +460,45 @@ class Session:
     def get_user_collections(self):
         """Get user collections manager for favorites and collections."""
         from .api.user import UserCollections
+
         return UserCollections(self.client)
 
     def get_user_tracks(self, country_code: str = None, **kwargs) -> list[Track]:
         """Get user's favorite tracks, hydrated with artists+albums."""
         from .api.catalog import _hydrate_tracks
         from .api.user import UserTracks
-        tracks, _ = UserTracks(self.client).get_tracks(
-            country_code=country_code or self.country_code, **kwargs
+
+        tracks, _ = UserTracks(self.client).get_tracks(country_code=country_code or self.country_code, **kwargs)
+        return _hydrate_tracks(
+            self.client, tracks, country_code=self.country_code, fetch_album_covers=self.fetch_album_covers
         )
-        return _hydrate_tracks(self.client, tracks,
-                               country_code=self.country_code,
-                               fetch_album_covers=self.fetch_album_covers)
 
     def get_user_albums(self, country_code: str = None, **kwargs) -> list[Album]:
         """Get user's favorite albums."""
         from .api.user import UserAlbums
-        albums, _ = UserAlbums(self.client).get_albums(
-            country_code=country_code or self.country_code, **kwargs
-        )
+
+        albums, _ = UserAlbums(self.client).get_albums(country_code=country_code or self.country_code, **kwargs)
         return albums
 
     def get_user_artists(self, country_code: str = None, **kwargs) -> list[Artist]:
         """Get user's favorite artists."""
         from .api.user import UserArtists
-        artists, _ = UserArtists(self.client).get_artists(
-            country_code=country_code or self.country_code, **kwargs
-        )
+
+        artists, _ = UserArtists(self.client).get_artists(country_code=country_code or self.country_code, **kwargs)
         return artists
 
     def get_user_playlists(self, **kwargs) -> list[Playlist]:
         """Get user's favorite playlists."""
         from .api.user import UserPlaylists
+
         playlists, _ = UserPlaylists(self.client).get_playlists(**kwargs)
         return playlists
 
     def get_user_videos(self, country_code: str = None, **kwargs) -> list[Video]:
         """Get user's favorite videos."""
         from .api.user import UserVideos
-        videos, _ = UserVideos(self.client).get_videos(
-            country_code=country_code or self.country_code, **kwargs
-        )
+
+        videos, _ = UserVideos(self.client).get_videos(country_code=country_code or self.country_code, **kwargs)
         return videos
 
     # ── Enhanced methods now using oapi (previously v1/v2 only) ──────────
@@ -487,59 +507,67 @@ class Session:
         """Get album tracks with artists+albums hydrated (2 calls)."""
         from .api.catalog import _hydrate_tracks, get_album
         from .types import AlbumInclude
-        album, _ = get_album(self.client, album_id,
-                             include=(AlbumInclude.ITEMS, AlbumInclude.ARTISTS,
-                                      AlbumInclude.COVER_ART, AlbumInclude.SIMILAR_ALBUMS))
-        return _hydrate_tracks(self.client, album.tracks,
-                               country_code=self.country_code,
-                               fetch_album_covers=self.fetch_album_covers)
+
+        album, _ = get_album(
+            self.client,
+            album_id,
+            include=(AlbumInclude.ITEMS, AlbumInclude.ARTISTS, AlbumInclude.COVER_ART, AlbumInclude.SIMILAR_ALBUMS),
+        )
+        return _hydrate_tracks(
+            self.client, album.tracks, country_code=self.country_code, fetch_album_covers=self.fetch_album_covers
+        )
 
     def get_artist_albums(self, artist_id: int) -> list[Album]:
         """Get artist albums via relationship endpoint."""
         from .api.catalog import get_artist
         from .types import ArtistInclude
-        artist, _ = get_artist(self.client, artist_id,
-                               include=(ArtistInclude.ALBUMS,))
+
+        artist, _ = get_artist(self.client, artist_id, include=(ArtistInclude.ALBUMS,))
         return artist.albums
 
-    def get_artist_tracks(self, artist_id: int, limit = 20) -> list[Track]:
+    def get_artist_tracks(self, artist_id: int, limit=20) -> list[Track]:
         """Get artist tracks via relationship endpoint (already hydrated)."""
         from .api.catalog import get_artist_tracks
-        tracks, _ = get_artist_tracks(self.client, artist_id,
-                                      country_code=self.country_code, limit=limit)
+
+        tracks, _ = get_artist_tracks(self.client, artist_id, country_code=self.country_code, limit=limit)
         return tracks
 
     def get_playlist_tracks(self, uuid: str, limit: int = 0, offset: int = 0) -> list[Track]:
         """Get playlist tracks with artists+albums hydrated (2 calls)."""
         from .api.catalog import _hydrate_tracks, get_playlist
         from .types import PlaylistInclude
-        playlist, _ = get_playlist(self.client, uuid,
-                                   include=(PlaylistInclude.ITEMS,))
-        return _hydrate_tracks(self.client, playlist.tracks,
-                               country_code=self.country_code,
-                               fetch_album_covers=self.fetch_album_covers)
+
+        playlist, _ = get_playlist(self.client, uuid, include=(PlaylistInclude.ITEMS,))
+        return _hydrate_tracks(
+            self.client, playlist.tracks, country_code=self.country_code, fetch_album_covers=self.fetch_album_covers
+        )
 
     def get_artist_by_handle(self, handle: str) -> Artist | None:
         """Get artist by handle using oapi."""
         from .api.catalog import get_artists
+
         artists, _ = get_artists(self.client, handles=[handle])
         return artists[0] if artists else None
 
     def create_playlist(self, name: str, description: str = "") -> Playlist:
         from .api.catalog import create_playlist
+
         p, _ = create_playlist(self.client, name, description)
         return p
 
     def add_tracks_to_playlist(self, playlist_id: str, track_ids: list[str]) -> None:
         from .api.catalog import add_tracks_to_playlist
+
         add_tracks_to_playlist(self.client, playlist_id, track_ids)
 
     def remove_tracks_from_playlist(self, playlist_id: str, track_ids: list[str]) -> None:
         from .api.catalog import remove_tracks_from_playlist
+
         remove_tracks_from_playlist(self.client, playlist_id, track_ids)
 
     def delete_playlist(self, playlist_id: str) -> None:
         from .api.catalog import delete_playlist
+
         delete_playlist(self.client, playlist_id)
 
     # ── v1/v2 only (no oapi equivalent or oapi insufficient) ────────────
@@ -547,26 +575,31 @@ class Session:
     def get_artist_top_tracks(self, artist_id: int, limit: int = 10):
         """Get artist top tracks (v1 only - no oapi equivalent)."""
         from .api.catalog_v1 import get_artist_top_tracks
+
         return get_artist_top_tracks(self.client, artist_id, self, limit)
 
     def get_lyrics(self, track_id: int) -> Lyrics:
         """Get track lyrics (v1 only - no oapi equivalent)."""
         from .api.catalog_v1 import get_lyrics
+
         return get_lyrics(self.client, track_id, self)
 
     def suggest(self, query: str, limit: int = 5) -> dict:
         """Get search suggestions (v2 only - different from oapi search suggestions)."""
         from .api.catalog_v2 import suggest
+
         return suggest(self.client, query, limit)
 
     def feed_activities(self, limit: int = 9) -> list[dict]:
         """Get user feed activities (v2 only - no oapi equivalent)."""
         from .api.catalog_v2 import feed_activities
+
         return feed_activities(self.client, self.user_id, limit)
 
     def is_artist_playable(self, artist_id: int) -> bool:
         """Check if artist is playable (v2 only - no oapi equivalent)."""
         from .api.catalog_v2 import is_artist_playable
+
         return is_artist_playable(self.client, artist_id)
 
     # ── stream ───────────────────────────────────────────────────────────
@@ -578,7 +611,9 @@ class Session:
 
     def get_decryption_keys(self, stream: StreamInfo) -> list[tuple[str, str]]:
         return get_decryption_keys(
-            self.client, stream, cdm=self.cdm,
+            self.client,
+            stream,
+            cdm=self.cdm,
             service_cert=self.service_cert(stream.license_url),
         )
 
@@ -586,7 +621,8 @@ class Session:
         """Fetch and cache the Widevine service certificate by license URL."""
         if license_url not in self._service_certs:
             self._service_certs[license_url] = fetch_service_certificate(
-                self.client, license_url,
+                self.client,
+                license_url,
             )
         return self._service_certs[license_url]
 
@@ -608,11 +644,7 @@ class Session:
             raise NotFoundError(f"Mix {mix_id} not found or empty", status=404)
         header = page.categories[0]
         items_mod = page.categories[1]
-        m = (
-            header.items[0]
-            if header.items and isinstance(header.items[0], Mix)
-            else Mix({"id": mix_id}, self)
-        )
+        m = header.items[0] if header.items and isinstance(header.items[0], Mix) else Mix({"id": mix_id}, self)
         m._page_items = items_mod.items
         return m
 
@@ -649,12 +681,7 @@ class Session:
     def moods(self) -> list[PageLink]:
         """Get mood links (navigable — call .get() on each)."""
         pg = self.get_page("moods")
-        return [
-            item
-            for cat in pg.categories
-            for item in cat.items
-            if isinstance(item, PageLink)
-        ]
+        return [item for cat in pg.categories for item in cat.items if isinstance(item, PageLink)]
 
     def mixes(self) -> Page:
         return self.get_page("my_collection_my_mixes")

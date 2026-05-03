@@ -12,9 +12,20 @@ if TYPE_CHECKING:
 
 class Playlist(_Model):
     __slots__ = (
-        "id", "title", "name", "num_tracks", "num_videos", "duration",
-        "description", "type", "image_id", "square_image",
-        "created", "last_updated", "creator", "promoted_artists",
+        "id",
+        "title",
+        "name",
+        "num_tracks",
+        "num_videos",
+        "duration",
+        "description",
+        "type",
+        "image_id",
+        "square_image",
+        "created",
+        "last_updated",
+        "creator",
+        "promoted_artists",
     )
 
     def __init__(self, raw: dict[str, Any], session: Session):
@@ -35,9 +46,7 @@ class Playlist(_Model):
         self.created: str = data.get("created", "")
         self.last_updated: str = data.get("lastUpdated", "")
         self.creator = data.get("creator")
-        self.promoted_artists: list[Artist] = [
-            _Artist(a, session) for a in (data.get("promotedArtists") or [])
-        ]
+        self.promoted_artists: list[Artist] = [_Artist(a, session) for a in (data.get("promotedArtists") or [])]
 
     def get_tracks(self, limit: int = 100, offset: int = 0) -> list[Track]:
         """Get tracks with pagination"""
@@ -58,12 +67,12 @@ class Playlist(_Model):
         return all_tracks
 
     # -- oapi compatibility interface --
-    
+
     @property
     def tracks(self) -> list[Track]:
         """Property that returns all tracks (oapi interface compatibility)"""
         return self.tracks_paginated()
-    
+
     def cover(self, size: int = 480) -> str:
         """Compatibility with oapi Playlist.cover()"""
         return self.image(size)
@@ -83,7 +92,8 @@ class Playlist(_Model):
             data["description"] = description
         if data:
             s.client.request(
-                "POST", f"https://api.tidal.com/v1/playlists/{self.id}",
+                "POST",
+                f"https://api.tidal.com/v1/playlists/{self.id}",
                 headers={"If-None-Match": "*"},
                 data=data,
                 params={"countryCode": s.client.country_code},
@@ -93,7 +103,8 @@ class Playlist(_Model):
         s = self._session
         ids_str = ",".join(str(t) for t in track_ids)
         s.client.request(
-            "POST", f"https://api.tidal.com/v1/playlists/{self.id}/items",
+            "POST",
+            f"https://api.tidal.com/v1/playlists/{self.id}/items",
             headers={"If-None-Match": "*"},
             data={"trackIds": ids_str, "onDupes": "FAIL"},
             params={"countryCode": s.client.country_code},
@@ -102,7 +113,8 @@ class Playlist(_Model):
     def remove_by_index(self, index: int) -> None:
         s = self._session
         s.client.request(
-            "DELETE", f"https://api.tidal.com/v1/playlists/{self.id}/items/{index}",
+            "DELETE",
+            f"https://api.tidal.com/v1/playlists/{self.id}/items/{index}",
             headers={"If-None-Match": "*"},
             params={"countryCode": s.client.country_code},
         )

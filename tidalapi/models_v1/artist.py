@@ -45,6 +45,7 @@ class Artist(_Model):
         """Artist radio: tracks similar to this artist via v1 API.
         Falls back to top tracks if radio is unavailable."""
         from .track import Track as _Track
+
         try:
             raw = self._session.client.v1(f"artists/{self.id}/radio", {"limit": limit})
             return [_Track(t, self._session) for t in raw.get("items", raw if isinstance(raw, list) else [])]
@@ -52,13 +53,13 @@ class Artist(_Model):
             return self.get_top_tracks(limit=limit)
 
     # -- Compatibility methods for oapi interface --
-    
+
     @property
     def albums(self) -> list[Album]:
         """Compatibility with oapi Artist.albums"""
         return self.get_albums()
 
-    @property 
+    @property
     def top_tracks(self) -> list[Track]:
         """Compatibility with oapi Artist.top_tracks"""
         return self.get_top_tracks()

@@ -28,11 +28,13 @@ class Artist(Model):
     @property
     def albums(self) -> list[Album]:
         from .album import Album
+
         return [Album(r, self._doc, self._client) for r in self._doc.related(ArtistRel.ALBUMS, self._r)]
 
     @property
     def top_tracks(self) -> list[Track]:
         from .track import Track
+
         return [Track(r, self._doc, self._client) for r in self._doc.related(ArtistRel.TRACKS, self._r)]
 
     @property
@@ -43,11 +45,13 @@ class Artist(Model):
     def radio(self) -> list:
         """Artist radio — returns playlist(s)."""
         from .playlist import Playlist
+
         return [Playlist(r, self._doc, self._client) for r in self._doc.related(ArtistRel.RADIO, self._r)]
 
     @property
     def videos(self) -> list[Video]:
         from .video import Video
+
         return [Video(r, self._doc, self._client) for r in self._doc.related(ArtistRel.VIDEOS, self._r)]
 
     @property

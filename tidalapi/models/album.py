@@ -63,6 +63,7 @@ class Album(Model):
     @property
     def artists(self) -> list[Artist]:
         from .artist import Artist
+
         return [Artist(r, self._doc, self._client) for r in self._doc.related(AlbumRel.ARTISTS, self._r)]
 
     @property
@@ -92,6 +93,7 @@ class Album(Model):
 
 def _track_with_meta(resource: Resource, meta: dict[str, Any], doc: Document, client: object) -> Track:
     from .track import Track
+
     if meta:
         resource.meta = {**resource.meta, **meta}
     return Track(resource, doc, client)

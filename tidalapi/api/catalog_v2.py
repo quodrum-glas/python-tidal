@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 # -- search ---------------------------------------------------------------
 
+
 def search(
     client: Client,
     session: Session,
@@ -29,8 +30,11 @@ def search(
     """Search TIDAL via v2 gateway. Returns ``{tracks: [...], albums: [...], ...}``."""
     if models and not types:
         _class_to_type = {
-            Artist: "ARTISTS", Album: "ALBUMS", Track: "TRACKS",
-            Video: "VIDEOS", Playlist: "PLAYLISTS",
+            Artist: "ARTISTS",
+            Album: "ALBUMS",
+            Track: "TRACKS",
+            Video: "VIDEOS",
+            Playlist: "PLAYLISTS",
         }
         types = [t for m in models if (t := _class_to_type.get(m))]
 
@@ -38,8 +42,7 @@ def search(
     raw = client.v2("search/", {"query": query, "limit": limit, "offset": offset, "types": type_str})
 
     out: dict[str, list] = {}
-    for key, cls in [("tracks", Track), ("albums", Album),
-                     ("artists", Artist), ("playlists", Playlist)]:
+    for key, cls in [("tracks", Track), ("albums", Album), ("artists", Artist), ("playlists", Playlist)]:
         if key in raw:
             out[key] = [cls(i, session) for i in raw[key].get("items", [])]
     if "videos" in raw:
@@ -59,6 +62,7 @@ def client_search(client: Client, query: str, limit: int = 50) -> dict:
 
 # -- artist ---------------------------------------------------------------
 
+
 def get_artist(client: Client, artist_id: int, session: Session) -> Artist:
     """Artist by numeric ID via v2 gateway."""
     return Artist(client.v2(f"artist/{artist_id}"), session)
@@ -76,6 +80,7 @@ def is_artist_playable(client: Client, artist_id: int) -> bool:
 
 
 # -- feed ----------------------------------------------------------------
+
 
 def feed_activities(client: Client, user_id: int, limit: int = 9) -> list[dict]:
     """Recent activity feed."""

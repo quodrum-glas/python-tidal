@@ -39,6 +39,7 @@ PKCE_REDIRECT_URI = "https://tidal.com/android/login/auth"
 
 # -- PKCE helpers -------------------------------------------------------------
 
+
 def _make_pkce() -> tuple[str, str]:
     """Generate (code_verifier, code_challenge) for PKCE S256."""
     verifier = base64.urlsafe_b64encode(os.urandom(32)).rstrip(b"=").decode()
@@ -49,9 +50,11 @@ def _make_pkce() -> tuple[str, str]:
 
 # -- LinkLogin (device-code flow data) ----------------------------------------
 
+
 @dataclass
 class LinkLogin:
     """Data returned from the device authorization endpoint."""
+
     verification_uri: str
     verification_uri_complete: str
     user_code: str
@@ -72,6 +75,7 @@ class LinkLogin:
 
 
 # -- Auth ---------------------------------------------------------------------
+
 
 @dataclass
 class Auth:
@@ -161,15 +165,19 @@ class Auth:
             raise AuthError(f"No 'code' parameter in redirect URL: {redirect_url}")
         code = qs["code"][0]
 
-        resp = requests.post(AUTH_URL, data={
-            "code": code,
-            "client_id": self.client_id,
-            "grant_type": "authorization_code",
-            "redirect_uri": PKCE_REDIRECT_URI,
-            "scope": "r_usr+w_usr+w_sub",
-            "code_verifier": self._code_verifier,
-            "client_unique_key": self._client_unique_key,
-        }, timeout=(5, 15))
+        resp = requests.post(
+            AUTH_URL,
+            data={
+                "code": code,
+                "client_id": self.client_id,
+                "grant_type": "authorization_code",
+                "redirect_uri": PKCE_REDIRECT_URI,
+                "scope": "r_usr+w_usr+w_sub",
+                "code_verifier": self._code_verifier,
+                "client_unique_key": self._client_unique_key,
+            },
+            timeout=(5, 15),
+        )
         if not resp.ok:
             raise AuthError(f"PKCE token exchange failed: {resp.status_code} {resp.text[:300]}")
 
@@ -196,10 +204,14 @@ class Auth:
         - Call auth_stub.poll_device_login(link_login) to block until done, or
         - Call auth_stub.check_device_login(link_login) in your own loop.
         """
-        resp = requests.post(DEVICE_AUTH_URL, data={
-            "client_id": client_id,
-            "scope": "r_usr w_usr w_sub",
-        }, timeout=(5, 15))
+        resp = requests.post(
+            DEVICE_AUTH_URL,
+            data={
+                "client_id": client_id,
+                "scope": "r_usr w_usr w_sub",
+            },
+            timeout=(5, 15),
+        )
         if not resp.ok:
             raise AuthError(f"Device auth request failed: {resp.status_code}")
 
@@ -240,13 +252,17 @@ class Auth:
 
     def check_device_login(self, link: LinkLogin) -> bool:
         """Single poll attempt. Returns True if login succeeded."""
-        resp = requests.post(AUTH_URL, data={
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-            "device_code": link.device_code,
-            "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-            "scope": "r_usr w_usr w_sub",
-        }, timeout=(5, 15))
+        resp = requests.post(
+            AUTH_URL,
+            data={
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "device_code": link.device_code,
+                "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                "scope": "r_usr w_usr w_sub",
+            },
+            timeout=(5, 15),
+        )
         if resp.ok:
             self._apply_token_response(resp.json())
             return True
@@ -302,13 +318,18 @@ class Auth:
     def save(self, path: str | Path | None = None) -> None:
         p = Path(path or self._path)
         self._path = p
-        p.write_text(json.dumps({
-            "token_type": self.token_type,
-            "access_token": self.access_token,
-            "refresh_token": self.refresh_token,
-            "expiry_time": self.expiry_time.isoformat(),
-            "is_pkce": self.is_pkce,
-        }, indent=2))
+        p.write_text(
+            json.dumps(
+                {
+                    "token_type": self.token_type,
+                    "access_token": self.access_token,
+                    "refresh_token": self.refresh_token,
+                    "expiry_time": self.expiry_time.isoformat(),
+                    "is_pkce": self.is_pkce,
+                },
+                indent=2,
+            )
+        )
 
     # ── internal ─────────────────────────────────────────────────────────
 

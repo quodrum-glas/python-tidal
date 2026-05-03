@@ -219,10 +219,12 @@ def get_track(
     include: tuple[TrackInclude, ...] = (TrackInclude.ARTISTS, TrackInclude.ALBUMS),
 ) -> tuple[Track, Document]:
     """Fetch a single track by id."""
-    doc = Document(client.oapi(
-        f"tracks/{track_id}",
-        {"include": _inc(*include)} if include else None,
-    ))
+    doc = Document(
+        client.oapi(
+            f"tracks/{track_id}",
+            {"include": _inc(*include)} if include else None,
+        )
+    )
     return Track(doc.primary, doc, client), doc
 
 
@@ -242,10 +244,12 @@ def get_album(
     Use :func:`get_tracks` with ``filter[id]`` + ``include=artists`` to
     hydrate tracks, or rely on mopidy-tidal's lookup to do it lazily.
     """
-    doc = Document(client.oapi(
-        f"albums/{album_id}",
-        {"include": _inc(*include)} if include else None,
-    ))
+    doc = Document(
+        client.oapi(
+            f"albums/{album_id}",
+            {"include": _inc(*include)} if include else None,
+        )
+    )
     return Album(doc.primary, doc, client), doc
 
 
@@ -266,10 +270,12 @@ def get_artist(
     on ``/artists/{id}/relationships/tracks``.  Use :func:`get_artist_tracks`
     to fetch an artist's tracks.
     """
-    doc = Document(client.oapi(
-        f"artists/{artist_id}",
-        {"include": _inc(*include)} if include else None,
-    ))
+    doc = Document(
+        client.oapi(
+            f"artists/{artist_id}",
+            {"include": _inc(*include)} if include else None,
+        )
+    )
     return Artist(doc.primary, doc, client), doc
 
 
@@ -289,12 +295,17 @@ def get_artist_tracks(
         include="tracks",
     )
     items, doc = _fetch_relationship(
-        client, f"artists/{artist_id}/relationships/tracks", params, limit=limit,
+        client,
+        f"artists/{artist_id}/relationships/tracks",
+        params,
+        limit=limit,
     )
     tracks = [Track(r, doc, client) for r in items]
     if tracks:
         tracks = _hydrate_tracks(
-            client, tracks, country_code=country_code,
+            client,
+            tracks,
+            country_code=country_code,
             fetch_album_covers=fetch_album_covers,
         )
     return tracks, doc
@@ -325,8 +336,8 @@ def _fetch_tracks_doc(client: Client, track_ids: list[str], country_code: str | 
     doc: Document | None = None
     for _, chunk_doc in chunked_fetch(
         lambda chunk: get_tracks(
-            client, track_ids=chunk, country_code=country_code,
-            include=(TrackInclude.ARTISTS, TrackInclude.ALBUMS)),
+            client, track_ids=chunk, country_code=country_code, include=(TrackInclude.ARTISTS, TrackInclude.ALBUMS)
+        ),
         track_ids,
     ):
         doc = chunk_doc if doc is None else (doc.merge(chunk_doc) or doc)
@@ -337,14 +348,11 @@ def _fetch_album_covers(client: Client, doc: Document, country_code: str | None)
     """Fetch coverArt for all albums in *doc*, merging in place."""
     from ..utils import chunked_fetch
 
-    album_ids = list({
-        r.id for r in doc.resources.values()
-        if (r.type.value if hasattr(r.type, 'value') else r.type) == "albums"
-    })
+    album_ids = list(
+        {r.id for r in doc.resources.values() if (r.type.value if hasattr(r.type, "value") else r.type) == "albums"}
+    )
     for _, chunk_doc in chunked_fetch(
-        lambda chunk: get_albums(
-            client, album_ids=chunk, country_code=country_code,
-            include=(AlbumInclude.COVER_ART,)),
+        lambda chunk: get_albums(client, album_ids=chunk, country_code=country_code, include=(AlbumInclude.COVER_ART,)),
         album_ids,
     ):
         doc.merge(chunk_doc)
@@ -353,10 +361,10 @@ def _fetch_album_covers(client: Client, doc: Document, country_code: str | None)
 def _tracks_from_doc(doc: Document, track_ids: list[str], client: Client) -> list[Track]:
     """Build Track objects from a Document, preserving order of track_ids."""
     from ..types import ResourceType
+
     result = []
     for tid in track_ids:
-        r = doc.resources.get((ResourceType.TRACKS, str(tid))) or \
-            doc.resources.get(("tracks", str(tid)))
+        r = doc.resources.get((ResourceType.TRACKS, str(tid))) or doc.resources.get(("tracks", str(tid)))
         if r:
             result.append(Track(r, doc, client))
     return result
@@ -372,10 +380,12 @@ def get_playlist(
 ) -> tuple[Playlist, Document]:
     """Fetch a single playlist by id with all items paginated."""
     # Fetch playlist metadata + coverArt (first page of items comes free)
-    doc = Document(client.oapi(
-        f"playlists/{playlist_id}",
-        {"include": _inc(*include)} if include else None,
-    ))
+    doc = Document(
+        client.oapi(
+            f"playlists/{playlist_id}",
+            {"include": _inc(*include)} if include else None,
+        )
+    )
     playlist = Playlist(doc.primary, doc, client)
 
     # If items requested, paginate via relationship to get ALL items
@@ -388,11 +398,9 @@ def get_playlist(
         doc.merge(items_doc)
         if items:
             from enum import Enum
+
             playlist._r.relationships["items"] = {
-                "data": [
-                    {"type": r.type.value if isinstance(r.type, Enum) else r.type, "id": r.id}
-                    for r in items
-                ]
+                "data": [{"type": r.type.value if isinstance(r.type, Enum) else r.type, "id": r.id} for r in items]
             }
 
     return playlist, doc
@@ -404,10 +412,12 @@ def get_video(
     include: tuple[VideoInclude, ...] = (VideoInclude.ARTISTS, VideoInclude.ALBUMS),
 ) -> tuple[Video, Document]:
     """Fetch a single video by id."""
-    doc = Document(client.oapi(
-        f"videos/{video_id}",
-        {"include": _inc(*include)} if include else None,
-    ))
+    doc = Document(
+        client.oapi(
+            f"videos/{video_id}",
+            {"include": _inc(*include)} if include else None,
+        )
+    )
     return Video(doc.primary, doc, client), doc
 
 
@@ -447,8 +457,7 @@ def create_playlist(
             "attributes": {"name": name, "description": description},
         }
     }
-    raw = client.oapi("playlists", params=_params(countryCode=country_code),
-                      method="POST", json=payload)
+    raw = client.oapi("playlists", params=_params(countryCode=country_code), method="POST", json=payload)
     doc = Document(raw)
     return Playlist(doc.primary, doc, client), doc
 
@@ -462,9 +471,12 @@ def add_tracks_to_playlist(
 ) -> None:
     """Add tracks to a playlist."""
     payload = {"data": [{"type": "tracks", "id": tid} for tid in track_ids]}
-    client.oapi(f"playlists/{playlist_id}/relationships/items",
-                params=_params(countryCode=country_code),
-                method="POST", json=payload)
+    client.oapi(
+        f"playlists/{playlist_id}/relationships/items",
+        params=_params(countryCode=country_code),
+        method="POST",
+        json=payload,
+    )
 
 
 def remove_tracks_from_playlist(
@@ -478,14 +490,15 @@ def remove_tracks_from_playlist(
     data = []
     for item in raw.get("data", []):
         if item.get("id") in remove_set and item.get("type") in ("tracks", "videos"):
-            data.append({
-                "type": item["type"],
-                "id": item["id"],
-                "meta": {"itemId": item.get("meta", {}).get("itemId", item["id"])},
-            })
+            data.append(
+                {
+                    "type": item["type"],
+                    "id": item["id"],
+                    "meta": {"itemId": item.get("meta", {}).get("itemId", item["id"])},
+                }
+            )
     if data:
-        client.oapi(f"playlists/{playlist_id}/relationships/items",
-                    method="DELETE", json={"data": data})
+        client.oapi(f"playlists/{playlist_id}/relationships/items", method="DELETE", json={"data": data})
 
 
 def delete_playlist(client: Client, playlist_id: str) -> None:

@@ -126,23 +126,20 @@ class Document:
         return [r for k in src.rel_keys(name) if (r := self.resolve(k))]
 
     def related_with_meta(
-        self, name: str | Enum, source: Resource | None = None,
+        self,
+        name: str | Enum,
+        source: Resource | None = None,
     ) -> list[tuple[Resource, dict[str, Any]]]:
         """Like :meth:`related`, but also returns per-linkage meta."""
         src = source or (self.primary if not self._primary_is_list else None)
         if src is None:
             return []
-        return [
-            (r, m)
-            for k, m in zip(src.rel_keys(name), src.rel_meta(name), strict=True)
-            if (r := self.resolve(k))
-        ]
+        return [(r, m) for k, m in zip(src.rel_keys(name), src.rel_meta(name), strict=True) if (r := self.resolve(k))]
 
     def of_type(self, resource_type: ResourceType | str) -> list[Resource]:
         """All resources of a given type."""
         t = resource_type.value if isinstance(resource_type, Enum) else resource_type
-        return [r for r in self.resources.values()
-                if (r.type.value if isinstance(r.type, Enum) else r.type) == t]
+        return [r for r in self.resources.values() if (r.type.value if isinstance(r.type, Enum) else r.type) == t]
 
     def merge(self, other: Document, target: Resource | None = None) -> None:
         """Merge *other*'s resources and relationships into this Document.

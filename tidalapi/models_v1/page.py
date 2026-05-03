@@ -27,8 +27,7 @@ class PageLink:
         self._session = session
 
     def get(self) -> Page:
-        return get_page(self._session.client, self.api_path.removeprefix("pages/"),
-                        _session=self._session)
+        return get_page(self._session.client, self.api_path.removeprefix("pages/"), _session=self._session)
 
     def __repr__(self):
         return f"<PageLink '{self.title}' → {self.api_path}>"
@@ -36,8 +35,16 @@ class PageLink:
 
 class PageItem:
     __slots__ = (
-        "header", "short_header", "short_sub_header", "image_id",
-        "type", "artifact_id", "text", "featured", "_session", "raw",
+        "header",
+        "short_header",
+        "short_sub_header",
+        "image_id",
+        "type",
+        "artifact_id",
+        "text",
+        "featured",
+        "_session",
+        "raw",
     )
 
     def __init__(self, raw: dict, session: Session):
@@ -101,11 +108,23 @@ class RoleItem:
 
 class PageModule:
     __slots__ = (
-        "type", "title", "description", "items", "total",
-        "_show_more_path", "_session", "raw",
-        "artist", "bio", "mixes", "role_categories", "playback_controls",
-        "social_profiles", "social_links",
-        "text", "icon",
+        "type",
+        "title",
+        "description",
+        "items",
+        "total",
+        "_show_more_path",
+        "_session",
+        "raw",
+        "artist",
+        "bio",
+        "mixes",
+        "role_categories",
+        "playback_controls",
+        "social_profiles",
+        "social_links",
+        "text",
+        "icon",
     )
 
     def __init__(self, raw: dict, session: Session):
@@ -220,8 +239,7 @@ class PageModule:
     def show_more(self) -> Page | None:
         if not self._show_more_path:
             return None
-        return get_page(self._session.client, self._show_more_path.removeprefix("pages/"),
-                        _session=self._session)
+        return get_page(self._session.client, self._show_more_path.removeprefix("pages/"), _session=self._session)
 
     def __repr__(self):
         return f"<PageModule [{self.type}] '{self.title}' ({len(self.items)} items)>"
@@ -236,11 +254,7 @@ class Page:
         self.id: str = raw.get("id", "")
         self.title: str = raw.get("title", "")
         rows = raw.get("rows", [])
-        self.categories: list[PageModule] = [
-            PageModule(m, session)
-            for row in rows
-            for m in row.get("modules", [])
-        ]
+        self.categories: list[PageModule] = [PageModule(m, session) for row in rows for m in row.get("modules", [])]
 
     def __iter__(self):
         for cat in self.categories:
@@ -251,6 +265,7 @@ class Page:
 
 
 # -- fetch helpers --------------------------------------------------------
+
 
 def get_page(client: Client, name: str, _session: Session, **extra) -> Page:
     params = {"locale": client.locale, "deviceType": "BROWSER", **extra}
