@@ -11,18 +11,7 @@ if TYPE_CHECKING:
 
 
 class Video(_Model):
-    __slots__ = (
-        "id",
-        "title",
-        "name",
-        "duration",
-        "artist",
-        "artists",
-        "album",
-        "image_id",
-        "quality",
-        "explicit",
-    )
+    __slots__ = ("id", "title", "name", "duration", "artist", "artists", "album", "image_id", "quality", "explicit")
 
     def __init__(self, raw: dict[str, Any], session: Session):
         super().__init__(raw, session)

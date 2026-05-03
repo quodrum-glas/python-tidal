@@ -16,15 +16,7 @@ from .video import Video
 if TYPE_CHECKING:
     from ..client import Client
 
-__all__ = [
-    "Model",
-    "Album",
-    "Artist",
-    "Playlist",
-    "Track",
-    "Video",
-    "wrap",
-]
+__all__ = ["Model", "Album", "Artist", "Playlist", "Track", "Video", "wrap"]
 
 
 def wrap(resource: Resource, doc: Document, client: Client) -> Model:

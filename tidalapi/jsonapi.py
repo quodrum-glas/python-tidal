@@ -126,9 +126,7 @@ class Document:
         return [r for k in src.rel_keys(name) if (r := self.resolve(k))]
 
     def related_with_meta(
-        self,
-        name: str | Enum,
-        source: Resource | None = None,
+        self, name: str | Enum, source: Resource | None = None
     ) -> list[tuple[Resource, dict[str, Any]]]:
         """Like :meth:`related`, but also returns per-linkage meta."""
         src = source or (self.primary if not self._primary_is_list else None)

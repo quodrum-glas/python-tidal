@@ -17,13 +17,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import requests
-from tenacity import (
-    before_sleep_log,
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
+from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from .exceptions import AuthError
 
@@ -193,11 +187,7 @@ class Auth:
     # ── Device-code (OAuth2) login flow ──────────────────────────────────
 
     @classmethod
-    def start_device_login(
-        cls,
-        client_id: str,
-        client_secret: str,
-    ) -> tuple[LinkLogin, Auth]:
+    def start_device_login(cls, client_id: str, client_secret: str) -> tuple[LinkLogin, Auth]:
         """Begin device-code login. Returns (link_login, auth_stub).
 
         Show the user link_login.verification_uri_complete. Then either:
@@ -205,12 +195,7 @@ class Auth:
         - Call auth_stub.check_device_login(link_login) in your own loop.
         """
         resp = requests.post(
-            DEVICE_AUTH_URL,
-            data={
-                "client_id": client_id,
-                "scope": "r_usr w_usr w_sub",
-            },
-            timeout=(5, 15),
+            DEVICE_AUTH_URL, data={"client_id": client_id, "scope": "r_usr w_usr w_sub"}, timeout=(5, 15)
         )
         if not resp.ok:
             raise AuthError(f"Device auth request failed: {resp.status_code}")
@@ -228,10 +213,7 @@ class Auth:
         return link, stub
 
     def poll_device_login(
-        self,
-        link: LinkLogin,
-        save_to: str | Path | None = None,
-        fn_print: Callable[[str], Any] = print,
+        self, link: LinkLogin, save_to: str | Path | None = None, fn_print: Callable[[str], Any] = print
     ) -> None:
         """Block until the user completes device-code login or it times out."""
         text = "Visit https://{} to log in, the code will expire in {} seconds"

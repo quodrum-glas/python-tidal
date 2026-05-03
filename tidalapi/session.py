@@ -41,17 +41,7 @@ from .auth import Auth, LinkLogin
 from .client import Client
 from .exceptions import AuthError, NotFoundError
 from .models import Album, Artist, Playlist, Track, Video
-from .models_v1 import (
-    Genre,
-    Lyrics,
-    Mix,
-    Page,
-    PageLink,
-    get_artist_page,
-    get_explore,
-    get_home,
-    get_page,
-)
+from .models_v1 import Genre, Lyrics, Mix, Page, PageLink, get_artist_page, get_explore, get_home, get_page
 from .utils import lazy
 
 log = logging.getLogger(__name__)
@@ -611,19 +601,13 @@ class Session:
 
     def get_decryption_keys(self, stream: StreamInfo) -> list[tuple[str, str]]:
         return get_decryption_keys(
-            self.client,
-            stream,
-            cdm=self.cdm,
-            service_cert=self.service_cert(stream.license_url),
+            self.client, stream, cdm=self.cdm, service_cert=self.service_cert(stream.license_url)
         )
 
     def service_cert(self, license_url: str) -> bytes:
         """Fetch and cache the Widevine service certificate by license URL."""
         if license_url not in self._service_certs:
-            self._service_certs[license_url] = fetch_service_certificate(
-                self.client,
-                license_url,
-            )
+            self._service_certs[license_url] = fetch_service_certificate(self.client, license_url)
         return self._service_certs[license_url]
 
     def get_video_url(self, video_id: int, quality: str = Quality.HIGH) -> str:

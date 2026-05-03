@@ -43,17 +43,7 @@ from .exceptions import (
 from .http import TidalRequestsSession
 
 # v1 models as top-level names (mopidy-tidal compat: isinstance checks)
-from .models_v1 import (
-    Album,
-    Artist,
-    Genre,
-    Lyrics,
-    Mix,
-    Page,
-    Playlist,
-    Track,
-    Video,
-)
+from .models_v1 import Album, Artist, Genre, Lyrics, Mix, Page, Playlist, Track, Video
 from .session import Session
 
 __all__ = [

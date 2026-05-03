@@ -35,11 +35,7 @@ class lazy:
         return val
 
 
-def chunked_fetch(
-    fn: Callable[[list], Any],
-    ids: list,
-    chunk_size: int = 20,
-) -> Iterator:
+def chunked_fetch(fn: Callable[[list], Any], ids: list, chunk_size: int = 20) -> Iterator:
     """Call *fn* with chunks of *ids*, yielding each result.
 
     Usage::
@@ -51,10 +47,7 @@ def chunked_fetch(
         yield fn(ids[i : i + chunk_size])
 
 
-def paginated_fetch(
-    fn: Callable[..., dict],
-    params: dict | None = None,
-) -> Iterator[dict]:
+def paginated_fetch(fn: Callable[..., dict], params: dict | None = None) -> Iterator[dict]:
     """Follow JSON:API cursor pagination, yielding each raw response.
 
     *fn* is called with *params* (plus ``page[cursor]`` on subsequent pages).

@@ -63,13 +63,7 @@ def get_playlist(client: Client, uuid: str, session: Session) -> Playlist:
     return Playlist(client.v1(f"playlists/{uuid}"), session)
 
 
-def get_playlist_tracks(
-    client: Client,
-    uuid: str,
-    session: Session,
-    limit: int = 100,
-    offset: int = 0,
-) -> list[Track]:
+def get_playlist_tracks(client: Client, uuid: str, session: Session, limit: int = 100, offset: int = 0) -> list[Track]:
     raw = client.v1(f"playlists/{uuid}/tracks", {"limit": limit, "offset": offset})
     return [Track(t, session) for t in raw.get("items", [])]
 

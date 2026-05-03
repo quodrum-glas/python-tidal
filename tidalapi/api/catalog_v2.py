@@ -29,13 +29,7 @@ def search(
 ) -> dict[str, list]:
     """Search TIDAL via v2 gateway. Returns ``{tracks: [...], albums: [...], ...}``."""
     if models and not types:
-        _class_to_type = {
-            Artist: "ARTISTS",
-            Album: "ALBUMS",
-            Track: "TRACKS",
-            Video: "VIDEOS",
-            Playlist: "PLAYLISTS",
-        }
+        _class_to_type = {Artist: "ARTISTS", Album: "ALBUMS", Track: "TRACKS", Video: "VIDEOS", Playlist: "PLAYLISTS"}
         types = [t for m in models if (t := _class_to_type.get(m))]
 
     type_str = ",".join(types or ["TRACKS", "ALBUMS", "ARTISTS"])

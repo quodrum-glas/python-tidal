@@ -143,22 +143,11 @@ class PlaylistFolders:
         self._s = session
 
     def list(
-        self,
-        folder_id: str = "root",
-        limit: int = 50,
-        offset: int = 0,
-        order: str = "DATE",
-        direction: str = "DESC",
+        self, folder_id: str = "root", limit: int = 50, offset: int = 0, order: str = "DATE", direction: str = "DESC"
     ) -> list[dict[str, Any]]:
         raw = self._c.v2(
             "my-collection/playlists/folders",
-            {
-                "folderId": folder_id,
-                "limit": limit,
-                "offset": offset,
-                "order": order,
-                "orderDirection": direction,
-            },
+            {"folderId": folder_id, "limit": limit, "offset": offset, "order": order, "orderDirection": direction},
         )
         return raw.get("items", [])
 

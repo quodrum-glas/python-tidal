@@ -100,11 +100,7 @@ def get_stream_v1(client: Client, track_id: int, quality: Quality | str = Qualit
     q = quality.value if isinstance(quality, Quality) else quality
     raw = client.v1(
         f"tracks/{track_id}/playbackinfopostpaywall",
-        {
-            "playbackmode": "STREAM",
-            "audioquality": q,
-            "assetpresentation": "FULL",
-        },
+        {"playbackmode": "STREAM", "audioquality": q, "assetpresentation": "FULL"},
     )
     return _build_stream_info(raw, track_id)
 
@@ -120,11 +116,7 @@ _OAPI_FORMATS: dict[Quality, list[str]] = {
 
 
 def get_stream_oapi(
-    client: Client,
-    track_id: int,
-    quality: Quality | str = Quality.LOSSLESS,
-    *,
-    adaptive: bool = False,
+    client: Client, track_id: int, quality: Quality | str = Quality.LOSSLESS, *, adaptive: bool = False
 ) -> StreamInfo:
     """Fetch stream via OpenAPI v2 trackManifests endpoint.
 
@@ -221,22 +213,11 @@ _CERT_REQUEST = bytes([0x08, 0x04])
 
 def fetch_service_certificate(client: Client, license_url: str) -> bytes:
     """Fetch the Widevine service certificate from the license server."""
-    resp = client.request(
-        "POST",
-        license_url,
-        data=_CERT_REQUEST,
-        headers={"Content-Type": "application/octet-stream"},
-    )
+    resp = client.request("POST", license_url, data=_CERT_REQUEST, headers={"Content-Type": "application/octet-stream"})
     return resp.content
 
 
-def get_decryption_keys(
-    client: Client,
-    stream: StreamInfo,
-    *,
-    cdm: Any,
-    service_cert: bytes,
-) -> list[tuple[str, str]]:
+def get_decryption_keys(client: Client, stream: StreamInfo, *, cdm: Any, service_cert: bytes) -> list[tuple[str, str]]:
     """Exchange with TIDAL's Widevine license server, return (kid, key) hex pairs."""
 
     if not cdm:
@@ -248,10 +229,7 @@ def get_decryption_keys(
         challenge = cdm.get_license_challenge(session_id, PSSH(stream.init_data[0]))
 
         resp = client.request(
-            "POST",
-            stream.license_url,
-            data=challenge,
-            headers={"Content-Type": "application/octet-stream"},
+            "POST", stream.license_url, data=challenge, headers={"Content-Type": "application/octet-stream"}
         )
 
         cdm.parse_license(session_id, resp.content)
@@ -269,11 +247,7 @@ def get_video_url(client: Client, video_id: int, quality: str = "HIGH") -> str:
     """Get the HLS playlist URL for a video."""
     raw = client.v1(
         f"videos/{video_id}/urlpostpaywall",
-        {
-            "urlusagemode": "STREAM",
-            "videoquality": quality,
-            "assetpresentation": "FULL",
-        },
+        {"urlusagemode": "STREAM", "videoquality": quality, "assetpresentation": "FULL"},
     )
     urls = raw.get("urls", [])
     if not urls:

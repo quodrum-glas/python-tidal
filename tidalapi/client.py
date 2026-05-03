@@ -8,13 +8,7 @@ from functools import wraps
 from typing import Any
 
 import requests as _req
-from tenacity import (
-    before_sleep_log,
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_random_exponential,
-)
+from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 
 from .auth import Auth
 from .exceptions import NotFoundError, RateLimitError, TidalError
@@ -70,11 +64,7 @@ class Client:
 
     def __init__(self, auth: Auth, http_timeout: tuple[float, float], min_request_gap: float = 0.05):
         self.auth = auth
-        self.http = TidalRequestsSession(
-            timeout=http_timeout,
-            pool_connections=4,
-            pool_maxsize=4,
-        )
+        self.http = TidalRequestsSession(timeout=http_timeout, pool_connections=4, pool_maxsize=4)
         self._gap = min_request_gap
         self._last_ts = 0.0
 

@@ -93,36 +93,19 @@ class UserCollection:
         return all_items, first_doc or Document({"data": []})
 
     def add_items(
-        self,
-        item_type: str,
-        item_ids: list[int | str],
-        user_id: str = "me",
-        *,
-        country_code: str | None = None,
+        self, item_type: str, item_ids: list[int | str], user_id: str = "me", *, country_code: str | None = None
     ) -> None:
         """Add items to user collection. Raises on failure."""
         params = _params(countryCode=country_code or self._client.country_code)
         payload = {"data": [{"type": item_type, "id": str(i)} for i in item_ids]}
         self._client.oapi(
-            f"{self._base_path}/{user_id}/relationships/items",
-            params=params,
-            method="POST",
-            json=payload,
+            f"{self._base_path}/{user_id}/relationships/items", params=params, method="POST", json=payload
         )
 
-    def remove_items(
-        self,
-        item_type: str,
-        item_ids: list[int | str],
-        user_id: str = "me",
-    ) -> None:
+    def remove_items(self, item_type: str, item_ids: list[int | str], user_id: str = "me") -> None:
         """Remove items from user collection. Raises on failure."""
         payload = {"data": [{"type": item_type, "id": str(i)} for i in item_ids]}
-        self._client.oapi(
-            f"{self._base_path}/{user_id}/relationships/items",
-            method="DELETE",
-            json=payload,
-        )
+        self._client.oapi(f"{self._base_path}/{user_id}/relationships/items", method="DELETE", json=payload)
 
 
 # -- Specific Collection Classes ------------------------------------------
@@ -145,11 +128,7 @@ class UserTracks(UserCollection):
     ) -> tuple[list[Track], Document]:
         """Get user's favorite tracks."""
         items, doc = self.get_items(
-            user_id,
-            country_code=country_code,
-            locale=locale,
-            page_cursor=page_cursor,
-            sort=sort,
+            user_id, country_code=country_code, locale=locale, page_cursor=page_cursor, sort=sort
         )
         return [Track(r, doc, self._client) for r in items], doc
 
@@ -177,11 +156,7 @@ class UserAlbums(UserCollection):
     ) -> tuple[list[Album], Document]:
         """Get user's favorite albums."""
         items, doc = self.get_items(
-            user_id,
-            country_code=country_code,
-            locale=locale,
-            page_cursor=page_cursor,
-            sort=sort,
+            user_id, country_code=country_code, locale=locale, page_cursor=page_cursor, sort=sort
         )
         return [Album(r, doc, self._client) for r in items], doc
 
@@ -209,11 +184,7 @@ class UserArtists(UserCollection):
     ) -> tuple[list[Artist], Document]:
         """Get user's favorite artists."""
         items, doc = self.get_items(
-            user_id,
-            country_code=country_code,
-            locale=locale,
-            page_cursor=page_cursor,
-            sort=sort,
+            user_id, country_code=country_code, locale=locale, page_cursor=page_cursor, sort=sort
         )
         return [Artist(r, doc, self._client) for r in items], doc
 
@@ -231,11 +202,7 @@ class UserPlaylists(UserCollection):
         super().__init__(client, "Playlists")
 
     def get_playlists(
-        self,
-        user_id: str = "me",
-        *,
-        page_cursor: str | None = None,
-        sort: str | None = None,
+        self, user_id: str = "me", *, page_cursor: str | None = None, sort: str | None = None
     ) -> tuple[list[Playlist], Document]:
         """Get user's favorite playlists."""
         items, doc = self.get_items(user_id, page_cursor=page_cursor, sort=sort)
@@ -265,11 +232,7 @@ class UserVideos(UserCollection):
     ) -> tuple[list[Video], Document]:
         """Get user's favorite videos."""
         items, doc = self.get_items(
-            user_id,
-            country_code=country_code,
-            locale=locale,
-            page_cursor=page_cursor,
-            sort=sort,
+            user_id, country_code=country_code, locale=locale, page_cursor=page_cursor, sort=sort
         )
         return [Video(r, doc, self._client) for r in items], doc
 
