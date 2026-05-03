@@ -1,8 +1,8 @@
 .PHONY: lint test
 
 lint:
-	ruff check tidalapi/ tests/
-	ruff format --check tidalapi/ tests/
+	uv run ruff check tidalapi/ tests/
+	uv run ruff format --check tidalapi/ tests/
 
 test:
-	pytest --cov=tidalapi --cov-report=xml --cov-report=term-missing tests/
+	uv run pytest --cov=tidalapi --cov-report=xml --cov-report=term-missing tests/
